@@ -36,9 +36,9 @@ def quick_hess(xdata,ydata,axrange=None,nxbin=250,nybin=100,logx=False,logy=Fals
     else:
         xspace=np.linspace(xmin,xmax,nxbin)
     if (logy):
-        xspace=np.logspace(np.log10(ymin),np.log10(ymax),nybin)
+        yspace=np.logspace(np.log10(ymin),np.log10(ymax),nybin)
     else:
-        xspace=np.linspace(ymin,ymax,nybin)
+        yspace=np.linspace(ymin,ymax,nybin)
 
     H,xbins,ybins=np.histogram2d(xdata,ydata,bins=(xspace,yspace))
     return H,xbins,ybins
@@ -94,35 +94,73 @@ def plot_selection(fname,data,dataCut,dataCutVHS,verbose=0):
 
 
 ########################################
-def plot_resid2(fname,data,verbose=0):
+def plot_selection2(fname,data,dataCut,dataCutVHS,verbose=0):
 
-    plt.figure(figsize=(9,9),dpi=90)
+    plt.figure(figsize=(8,8),dpi=90)
     plt.rc('font',size=9)
     plt.subplot()
 
-    plt.subplot(4,1,1)
-    H,xbins,ybins=quick_hess(data['ra'],data['dra'])
-    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="rainbow",aspect='auto')
-    plt.xlabel('RA')
-    plt.ylabel('dRA')
+    plt.subplot(2,2,1)
+    axrange=[-0.05,0.05,1.0,3.e4]
+    H,xbins,ybins=quick_hess(data['spread_model'],data['sn'],axrange=axrange,logx=False,logy=True)
+    plt.yscale('log')
+    wsm=np.where(H<0.1)
+    H[wsm]=0.1
+    plt.imshow(np.log10(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
+    plt.scatter(dataCut['spread_model'],dataCut['sn'],1,marker='.',color='red')
+    plt.axis(axrange)
+    plt.title('GAIA_DR2 Selection')
+    plt.xlabel('Spread_Model')
+    plt.ylabel('S/N')
 
-    plt.subplot(4,1,2)
-    H,xbins,ybins=quick_hess(data['ra'],data['ddec'])
-    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="rainbow",aspect='auto')
-    plt.xlabel('RA')
-    plt.ylabel('ddec')
+    plt.subplot(2,2,2)
+    axrange=[0.0,12.0,1.0,3.e4]
+    H,xbins,ybins=quick_hess(data['flux_radius'],data['sn'],axrange=axrange,logx=False,logy=True)
+    plt.yscale('log')
+    wsm=np.where(H<0.1)
+    H[wsm]=0.1
+    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
+    plt.scatter(dataCut['flux_radius'],dataCut['sn'],1,marker='.',color='red')
+    plt.axis(axrange)
+    plt.title('GAIA_DR2 Selection')
+    plt.xlabel('Flux_Radius[pix]')
+    plt.ylabel('S/N')
 
-    plt.subplot(4,1,3)
-    H,xbins,ybins=quick_hess(data['dec'],data['dra'])
-    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="rainbow",aspect='auto')
-    plt.xlabel('Dec')
-    plt.ylabel('dRA')
+    plt.subplot(2,2,3)
+    axrange=[-0.05,0.05,1.0,3.e4]
+    H,xbins,ybins=quick_hess(data['spread_model'],data['sn'],axrange=axrange,logx=False,logy=True)
+    plt.yscale('log')
+    wsm=np.where(H<0.1)
+    H[wsm]=0.1
+    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
+    if (dataCutVHS['sn'].size > 0):
+        plt.scatter(dataCutVHS['spread_model'],dataCutVHS['sn'],1,marker='.',color='red')
+    else:
+        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
+        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
+        plt.text(xtxt,ytxt,'No VHS matches',color='red')
+    plt.axis(axrange)
+    plt.title('VHS Selection')
+    plt.xlabel('Spread_Model')
+    plt.ylabel('S/N')
 
-    plt.subplot(4,1,4)
-    H,xbins,ybins=quick_hess(data['dec'],data['ddec'])
-    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="rainbow",aspect='auto')
-    plt.xlabel('Dec')
-    plt.ylabel('ddec')
+    plt.subplot(2,2,4)
+    axrange=[0.0,12.0,1.0,3.e4]
+    H,xbins,ybins=quick_hess(data['flux_radius'],data['sn'],axrange=axrange,logx=False,logy=True)
+    wsm=np.where(H<0.1)
+    H[wsm]=0.1
+    plt.yscale('log')
+    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
+    if (dataCutVHS['sn'].size > 0):
+        plt.scatter(dataCutVHS['flux_radius'],dataCutVHS['sn'],1,marker='.',color='red')
+    else:
+        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
+        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
+        plt.text(xtxt,ytxt,'No VHS matches',color='red')
+    plt.axis(axrange)
+    plt.title('VHS Selection')
+    plt.xlabel('Flux_Radius[pix]')
+    plt.ylabel('S/N')
 
     plt.savefig(fname)
     plt.close()
@@ -187,7 +225,7 @@ def plot_FP_quant(fname,data,verbose=0):
     tmp_y1=np.array([DFP.DECam_FP_layout[ccd]['y1'] for ccd in range(1,63) if (ccd in data['m_vhs'])])
     tmp_y2=np.array([DFP.DECam_FP_layout[ccd]['y1'] for ccd in range(1,63) if (ccd in data['m_vhs'])])
     tmp_y3=np.array([DFP.DECam_FP_layout[ccd]['y2'] for ccd in range(1,63) if (ccd in data['m_vhs'])])
-    tmp_y4=np.array([DFP.fDECam_FPlayout[ccd]['y2'] for ccd in range(1,63) if (ccd in data['m_vhs'])])
+    tmp_y4=np.array([DFP.DECam_FP_layout[ccd]['y2'] for ccd in range(1,63) if (ccd in data['m_vhs'])])
     y_box=np.array([tmp_x1,tmp_x2,tmp_x3,tmp_x4],'f4')
     x_box=np.array([tmp_y1,tmp_y2,tmp_y3,tmp_y4],'f4')
     pols=zip(x_box,y_box)

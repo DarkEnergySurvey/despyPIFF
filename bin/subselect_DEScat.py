@@ -173,7 +173,7 @@ def form_ExpCat(grp_list,DESColDict,verbose=0):
             print("   RA Range: {:9.5f} {:9.5f} ".format(ra1,ra2))
             print("  Dec Range: {:9.5f} {:9.5f} ".format(dec1,dec2))
 
-#    print(MetaCat)
+#   Finished reading all catalogs.
 
     RaDecRange={}
     rd_range['ra']=np.array(rd_range['ra'])
@@ -378,6 +378,117 @@ def get_VHS_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
     return CatDict,header
 
 
+######################################################################################
+def MatchUndStellarSelect(c1,c2,InCat,c2name,ColDict,ColSize,SND,MatchRad=0.5,verbose=0):
+
+    """ Work Horse routine to match a pair of catalogs and then go through and refine 
+        the entries based on size and signal-to-noise
+
+        Inputs:
+            c1:         AstroPy SkyCoord struct for input catalog (InCat)
+            c2:         AstroPy SkyCoord struct for matching catalog
+            InCat:      The corresponding catalog that will be operated on
+            c2name:     Name/Identifier (for reporting and output dict) of the matching catalog
+            ColDict:    Dictionay of columns that will be carried forward from InCat
+            ColSize:    A column name in InCat that is used when probing output catalog size
+            SND:        Dict containing attributes when making decisions about Signal-to-Noise Cuts
+            MatchRad:   Radius [in arcseconds] to use when making a match (default=0.5)
+            dbSchema:   Schema over which queries will occur.
+            verbose:    Integer setting level of verbosity when running.
+
+        Returns:
+            ret_cat:    Dict: Subset of InCat that matched c2 and survived further size/signal-to-noise cuts
+            DMCat:      Diagnostic/MetaData returned from matching
+    """
+#
+#   Initialize metadata being returned
+#
+    DMCat={'nm':0,
+           'nm_cut':0,
+           'nm_cut0':0,
+           'nm_add':0,
+           'avg_size':-1.,
+           'med_size':-1.,
+           'std_size':-1.,
+           'min_size':-1.,
+           'max_size':-1.,
+           'min_sn':-1.,
+           'max_sn':-1.,
+           'max_flux_cut':-1.}
+#
+#   Find entries in c1 that spatially match those in c2
+#
+    idx2, d2d, d3d = c1.match_to_catalog_sky(c2)
+    idx1=np.arange(InCat[ColSize].size)
+    wsm=np.where(d2d.arcsecond<MatchRad)
+    DMCat['nm']=idx1[wsm].size
+
+    ret_cat={}
+    for key in ColDict:
+        ret_cat[key]=InCat[key][idx1[wsm]]
+#
+#   Remove FLAGGED and LOW signal-to-noise objects
+#   For the DIAGNOSTIC just remove flagged....
+#
+    wsm=np.where(np.logical_and(np.logical_and(ret_cat['FLAGS']==0,ret_cat['IMAFLAGS_ISO']==0),
+                                ret_cat['FLUX_AUTO']/ret_cat['FLUXERR_AUTO']>SND['sncut']))
+    for key in ColDict:
+        ret_cat[key]=ret_cat[key][wsm]
+    DMCat['nm_cut0']=ret_cat[ColSize].size
+
+#
+#   If there is still data present then go ahead and analyze size and signal-to-noise distributions...
+#
+    if (ret_cat[ColSize].size > 1):
+#
+#       Find typical size of objects... clip and get approrpriate range of sizes (for stellar locus)
+#
+        avg_size,med_size,std_size=medclip(ret_cat['FLUX_RADIUS'],verbose=0)
+        min_size=avg_size-(3.0*std_size)
+        max_size=avg_size+(3.0*std_size)
+        DMCat['avg_size']=avg_size
+        DMCat['med_size']=med_size
+        DMCat['std_size']=std_size
+        DMCat['min_size']=min_size
+        DMCat['max_size']=max_size
+        wsm=np.where(np.logical_and(ret_cat['FLUX_RADIUS']>min_size,ret_cat['FLUX_RADIUS']<max_size))
+#
+#       Look at S/N range of remaining items...
+#
+        tmp_sn=ret_cat['FLUX_AUTO'][wsm]/ret_cat['FLUXERR_AUTO'][wsm]
+        min_sn=np.amin(tmp_sn)
+        if (min_sn < SND['sncut']):
+            min_sn=SND['sncut']
+        max_sn=np.amax(tmp_sn)
+        max_flux_cut=np.amax(ret_cat['FLUX_AUTO'][wsm])
+        print("Peak {:s} flux currently: {:6.3e} ".format(c2name,max_flux_cut))
+        if (max_sn > SND['top_sn_thresh']):
+            max_flux_cut=10.0**((-2.5*np.log10(max_flux_cut)+SND['remove_top_sn'])/-2.5)
+            print("   Peak {:s} flux cut to: {:6.3e} ".format(c2name,max_flux_cut))
+        DMCat['min_sn']=min_sn
+        DMCat['max_sn']=max_sn
+        DMCat['max_flux_cut']=max_flux_cut
+#
+#       Back to actual catalog... now removing points based on S/N and SIZE
+#    
+        tmp_sn=ret_cat['FLUX_AUTO']/ret_cat['FLUXERR_AUTO']
+        wsm=np.where(np.logical_and(np.logical_and(ret_cat['FLUX_RADIUS']>min_size,ret_cat['FLUX_RADIUS']<max_size),
+                                    np.logical_and(tmp_sn>min_sn,ret_cat['FLUX_AUTO']<max_flux_cut)))
+        for key in DESColDict:
+            ret_cat[key]=ret_cat[key][wsm]
+        DMCat['nm_cut']=ret_cat[ColSize].size
+
+#
+#       Look to get a sense whether there are objects that could be added back in
+#
+        tmp_sn=InCat['FLUX_AUTO']/InCat['FLUXERR_AUTO']
+        wsm=np.where(np.logical_and(np.logical_and(InCat['FLUX_RADIUS']>min_size,InCat['FLUX_RADIUS']<max_size),
+                                    np.logical_and(tmp_sn>min_sn,InCat['FLUX_AUTO']<max_flux_cut)))
+        DMCat['nm_add']=InCat[ColSize][wsm].size
+
+    return ret_cat,DMCat
+
+
 ############################################################
 ############################################################
 
@@ -537,233 +648,114 @@ if __name__ == "__main__":
     c2=SkyCoord(ra=GaiaCat['RA']*u.degree,dec=GaiaCat['DEC']*u.degree)
     if (checkVHS):
         c3=SkyCoord(ra=VHSCat['RA']*u.degree,dec=VHSCat['DEC']*u.degree)
-  
+ 
 #
 #   Main body catalog comparison and source selection
 # 
-
+    SNdict={'sncut':args.sncut,
+            'top_sn_thresh':args.top_sn_thresh,
+            'remove_top_sn':args.remove_top_sn}
     diag_cat={}
-    kept_cat={} 
+    kept_cat_GAIA={} 
     kept_cat_VHS={}
     for Cat in grp_list:
         if (Cat not in MetaCat):
             MetaCat[Cat]={}
         print("Working on catalog: {:s}".format(Cat))
         nobj0=ExpCat[Cat][DESColList[0]].size
-
-        c1=SkyCoord(ra=ExpCat[Cat]['ALPHAWIN_J2000']*u.degree,dec=ExpCat[Cat]['DELTAWIN_J2000']*u.degree)
-        idx2, d2d, d3d = c1.match_to_catalog_sky(c2)
-        idx1=np.arange(ExpCat[Cat]['ALPHAWIN_J2000'].size)
-        wsm=np.where(d2d.arcsecond<0.50)
-        MetaCat[Cat]['nm_GAIA']=idx1[wsm].size
-
+#
+#       Form the diagnostic cat (basically a copy the input (but then remove FLAGGED objects)
+#       (possibly don't need the np.copy any more)
+#
         diag_cat[Cat]={}
-        kept_cat[Cat]={}
+        dwsm=np.where(np.logical_and(ExpCat[Cat]['FLAGS']==0,ExpCat[Cat]['IMAFLAGS_ISO']==0))
         for key in DESColDict:
-            kept_cat[Cat][key]=ExpCat[Cat][key][idx1[wsm]]
-            diag_cat[Cat][key]=np.copy(ExpCat[Cat][key])
-#
-#       Remove FLAGGED and LOW signal-to-noise objects
-#       For the DIAGNOSTIC just remove flagged....
-#
-        wsm=np.where(np.logical_and(np.logical_and(kept_cat[Cat]['FLAGS']==0,kept_cat[Cat]['IMAFLAGS_ISO']==0),
-                                    kept_cat[Cat]['FLUX_AUTO']/kept_cat[Cat]['FLUXERR_AUTO']>args.sncut))
-        dwsm=np.where(np.logical_and(diag_cat[Cat]['FLAGS']==0,diag_cat[Cat]['IMAFLAGS_ISO']==0))
-        for key in DESColDict:
-            kept_cat[Cat][key]=kept_cat[Cat][key][wsm]
-            diag_cat[Cat][key]=diag_cat[Cat][key][dwsm]
-        MetaCat[Cat]['nm_GAIA_cut0']=kept_cat[Cat][DESColList[0]].size
+            diag_cat[Cat][key]=np.copy(ExpCat[Cat][key][dwsm])
 
 #
-#       Find typical size of objects... clip and get approrpriate range of sizes (for stellar locus)
+#       Perform matching against GAIA (and VHS) and then attempt to isolate further the appropriate portion of stellar locus
 #
-        avg_GM_size,med_GM_size,std_GM_size=medclip(kept_cat[Cat]['FLUX_RADIUS'],verbose=0)
-        min_GM_size=avg_GM_size-(3.0*std_GM_size)
-        max_GM_size=avg_GM_size+(3.0*std_GM_size)
-        wsm=np.where(np.logical_and(kept_cat[Cat]['FLUX_RADIUS']>min_GM_size,kept_cat[Cat]['FLUX_RADIUS']<max_GM_size))
+        c1=SkyCoord(ra=ExpCat[Cat]['ALPHAWIN_J2000']*u.degree,dec=ExpCat[Cat]['DELTAWIN_J2000']*u.degree)
 
-#
-#       Look at S/N range of remaining items...
-#
-        tmp_sn=kept_cat[Cat]['FLUX_AUTO'][wsm]/kept_cat[Cat]['FLUXERR_AUTO'][wsm]
-        min_GM_sn=np.amin(tmp_sn)
-        if (min_GM_sn < args.sncut):
-            min_GM_sn=args.sncut
-        max_GM_sn=np.amax(tmp_sn)
-        max_GM_flux_cut=np.amax(kept_cat[Cat]['FLUX_AUTO'][wsm])
-        print("Peak flux currently: {:6.3e} ".format(max_GM_flux_cut))
-        if (max_GM_sn > args.top_sn_thresh):
-            max_GM_flux_cut=10.0**((-2.5*np.log10(max_GM_flux_cut)+args.remove_top_sn)/-2.5)
-            print("   Peak flux cut to: {:6.3e} ".format(max_GM_flux_cut))
-        tmp_sn=kept_cat[Cat]['FLUX_AUTO']/kept_cat[Cat]['FLUXERR_AUTO']
-        wsm=np.where(np.logical_and(np.logical_and(kept_cat[Cat]['FLUX_RADIUS']>min_GM_size,kept_cat[Cat]['FLUX_RADIUS']<max_GM_size),
-                                    np.logical_and(tmp_sn>min_GM_sn,kept_cat[Cat]['FLUX_AUTO']<max_GM_flux_cut)))
-        for key in DESColDict:
-            kept_cat[Cat][key]=kept_cat[Cat][key][wsm]
-        MetaCat[Cat]['nm_GAIA_cut']=kept_cat[Cat][DESColList[0]].size
-
-#
-#       Look to see if there are objects that can be added.
-#
-        tmp_sn=diag_cat[Cat]['FLUX_AUTO']/diag_cat[Cat]['FLUXERR_AUTO']
-        wsm=np.where(np.logical_and(np.logical_and(diag_cat[Cat]['FLUX_RADIUS']>min_GM_size,diag_cat[Cat]['FLUX_RADIUS']<max_GM_size),
-                                    np.logical_and(tmp_sn>min_GM_sn,diag_cat[Cat]['FLUX_AUTO']<max_GM_flux_cut)))
-
-        MetaCat[Cat]['nm_GAIA_add']=diag_cat[Cat][DESColList[0]][wsm].size
-        MetaCat[Cat]['min_GM_sn']=min_GM_sn
-        MetaCat[Cat]['max_GM_sn']=max_GM_sn
-        MetaCat[Cat]['max_GM_flux_cut']=max_GM_flux_cut
-        MetaCat[Cat]['min_GM_size']=min_GM_size
-        MetaCat[Cat]['max_GM_size']=max_GM_size
-        MetaCat[Cat]['avg_GM_size']=avg_GM_size
-        MetaCat[Cat]['med_GM_size']=med_GM_size
-        MetaCat[Cat]['std_GM_size']=std_GM_size
-        
-#
-#       Repeat for VHS
-#
-        MetaCat[Cat]['nm_VHS']=0
-        MetaCat[Cat]['nm_VHS_cut']=0
-        MetaCat[Cat]['nm_VHS_add']=0
-        avg_VM_size=-1
-        med_VM_size=-1
-        std_VM_size=-1
-        min_VM_size=-1
-        max_VM_size=-1
-        min_VM_sn=-1
-        max_VM_sn=-1
+        kept_cat_GAIA[Cat],GMCat=MatchUndStellarSelect(c1,c2,ExpCat[Cat],'GAIA',DESColDict,DESColList[0],SNdict,verbose=verbose)
+        MetaCat[Cat]['GAIA']=GMCat
         if (checkVHS):
-            idx2, d2d, d3d = c1.match_to_catalog_sky(c3)
-            idx1=np.arange(ExpCat[Cat]['ALPHAWIN_J2000'].size)
-            wsm=np.where(d2d.arcsecond<0.50)
-            MetaCat[Cat]['nm_VHS']=idx1[wsm].size
-
-            kept_cat_VHS[Cat]={}
-            for key in DESColDict:
-                kept_cat_VHS[Cat][key]=ExpCat[Cat][key][idx1[wsm]]
-#
-#           Remove FLAGGED and LOW signal-to-noise objects
-#
-            wsm=np.where(np.logical_and(
-                np.logical_and(kept_cat_VHS[Cat]['FLAGS']==0,kept_cat_VHS[Cat]['IMAFLAGS_ISO']==0),
-                kept_cat_VHS[Cat]['FLUX_AUTO']/kept_cat_VHS[Cat]['FLUXERR_AUTO']>args.sncut))
-            for key in DESColDict:
-                kept_cat_VHS[Cat][key]=kept_cat_VHS[Cat][key][wsm]
-            MetaCat[Cat]['nm_VHS_cut']=kept_cat_VHS[Cat][DESColList[0]].size
-
-            if (kept_cat_VHS[Cat]['FLUX_RADIUS'].size > 1):
-                avg_VM_size,med_VM_size,std_VM_size=medclip(kept_cat_VHS[Cat]['FLUX_RADIUS'],verbose=0)
-                min_VM_size=avg_VM_size-(3.0*std_VM_size)
-                max_VM_size=avg_VM_size+(3.0*std_VM_size)
-                wsm=np.where(np.logical_and(kept_cat_VHS[Cat]['FLUX_RADIUS']>min_VM_size,kept_cat_VHS[Cat]['FLUX_RADIUS']<max_VM_size))
-                tmp_sn=kept_cat_VHS[Cat]['FLUX_AUTO'][wsm]/kept_cat_VHS[Cat]['FLUXERR_AUTO'][wsm]
-                min_VM_sn=np.amin(tmp_sn)
-                max_VM_sn=np.amax(tmp_sn)
-                tmp_sn=diag_cat[Cat]['FLUX_AUTO']/diag_cat[Cat]['FLUXERR_AUTO']
-                wsm=np.where(np.logical_and(np.logical_and(diag_cat[Cat]['FLUX_RADIUS']>min_VM_size,diag_cat[Cat]['FLUX_RADIUS']<max_VM_size),
-                                        np.logical_and(tmp_sn>min_VM_sn,tmp_sn<max_VM_sn)))
-                MetaCat[Cat]['nm_VHS_add']=diag_cat[Cat][DESColList[0]][wsm].size
-                MetaCat[Cat]['avg_VM_size']=avg_VM_size
-                MetaCat[Cat]['med_VM_size']=med_VM_size
-                MetaCat[Cat]['std_VM_size']=std_VM_size
-                MetaCat[Cat]['min_VM_size']=min_VM_size
-                MetaCat[Cat]['max_VM_size']=max_VM_size
-                MetaCat[Cat]['min_VM_sn']=min_VM_sn
-                MetaCat[Cat]['max_VM_sn']=max_VM_sn
-
+            kept_cat_VHS[Cat],VMCat=MatchUndStellarSelect(c1,c3,ExpCat[Cat],'VHS',DESColDict,DESColList[0],SNdict,verbose=verbose)
+            MetaCat[Cat]['VHS']=VMCat
+        else:
+            MetaCat[Cat]['VHS']={'nm':0,'nm_cut':0,'nm_cut0':0,'nm_add':0,'avg_size':-1.,'med_size':-1.,'std_size':-1.,
+                                 'min_size':-1.,'max_size':-1.,'min_sn':-1.,'max_sn':-1.,'max_flux_cut':-1.}
+#  
+ 
         print(" Match for {:7d} objects:  GAIA --> {:6d} cut {:6d} add {:6d},  VHS --> {:6d} cut {:6d} add {:6d} ".format(
             nobj0,
-            MetaCat[Cat]['nm_GAIA'], MetaCat[Cat]['nm_GAIA_cut'], MetaCat[Cat]['nm_GAIA_add'], 
-            MetaCat[Cat]['nm_VHS'],  MetaCat[Cat]['nm_VHS_cut'],  MetaCat[Cat]['nm_VHS_add']))
+            MetaCat[Cat]['GAIA']['nm'], MetaCat[Cat]['GAIA']['nm_cut'], MetaCat[Cat]['GAIA']['nm_add'], 
+            MetaCat[Cat]['VHS']['nm'],  MetaCat[Cat]['VHS']['nm_cut'],  MetaCat[Cat]['VHS']['nm_add']))
         print("   GAIA size: {:7.2f} {:7.2f} {:7.4f} -->  {:8.2f} {:8.2f} wS/N: {:8.1f} {:8.1f} ".format(
-            MetaCat[Cat]['avg_GM_size'],MetaCat[Cat]['med_GM_size'],MetaCat[Cat]['std_GM_size'],
-            MetaCat[Cat]['min_GM_size'],MetaCat[Cat]['max_GM_size'],MetaCat[Cat]['min_GM_sn'],MetaCat[Cat]['max_GM_sn']))
-        if ('avg_VM_size' in MetaCat[Cat]):
+            MetaCat[Cat]['GAIA']['avg_size'],MetaCat[Cat]['GAIA']['med_size'],MetaCat[Cat]['GAIA']['std_size'],
+            MetaCat[Cat]['GAIA']['min_size'],MetaCat[Cat]['GAIA']['max_size'],MetaCat[Cat]['GAIA']['min_sn'],MetaCat[Cat]['GAIA']['max_sn']))
+        if (checkVHS):
             print("   VHS  size: {:7.2f} {:7.2f} {:7.4f} -->  {:8.2f} {:8.2f} wS/N: {:8.1f} {:8.1f} ".format(
-                MetaCat[Cat]['avg_VM_size'],MetaCat[Cat]['med_VM_size'],MetaCat[Cat]['std_VM_size'],
-                MetaCat[Cat]['min_VM_size'],MetaCat[Cat]['max_VM_size'],MetaCat[Cat]['min_VM_sn'],MetaCat[Cat]['max_VM_sn']))
-        else:
-            print("   VHS  size: {:7.2f} {:7.2f} {:7.4f} -->  {:8.2f} {:8.2f} wS/N: {:8.1f} {:8.1f} ".format(
-                avg_VM_size,med_VM_size,std_VM_size,
-                min_VM_size,max_VM_size,min_VM_sn,max_VM_sn))
+                MetaCat[Cat]['VHS']['avg_size'],MetaCat[Cat]['VHS']['med_size'],MetaCat[Cat]['VHS']['std_size'],
+                MetaCat[Cat]['VHS']['min_size'],MetaCat[Cat]['VHS']['max_size'],MetaCat[Cat]['VHS']['min_sn'],MetaCat[Cat]['VHS']['max_sn']))
 
 #
 #   Make the QA plots.
 #
 
     if (args.qa_select is not None):
-        AccumSizeAll=0
-        AccumSizeCut=0
-        AccumSizeCutVHS=0
+        AccumSize={'All':0,'GAIA':0,'VHS':0}
         for Cat in grp_list:
-            AccumSizeAll+=diag_cat[Cat]['FLUX_AUTO'].size
-            AccumSizeCut+=kept_cat[Cat]['FLUX_AUTO'].size
+            AccumSize['All']+=diag_cat[Cat]['FLUX_AUTO'].size
+            AccumSize['GAIA']+=kept_cat_GAIA[Cat]['FLUX_AUTO'].size
             if (Cat in kept_cat_VHS):
-                AccumSizeCutVHS+=kept_cat_VHS[Cat]['FLUX_AUTO'].size
+                AccumSize['VHS']+=kept_cat_VHS[Cat]['FLUX_AUTO'].size
 
         AccumDataAll={}
-        AccumDataCut={}
-        AccumDataCutVHS={}
+        AccumDataGAIA={}
+        AccumDataVHS={}
         for Col in ['sn','spread_model','flux_radius']:
-            AccumDataAll[Col]=np.zeros(AccumSizeAll,dtype='f8')
-            AccumDataCut[Col]=np.zeros(AccumSizeCut,dtype='f8')
-            AccumDataCutVHS[Col]=np.zeros(AccumSizeCutVHS,dtype='f8')
+            AccumDataAll[Col]=np.zeros(AccumSize['All'],dtype='f8')
+            AccumDataGAIA[Col]=np.zeros(AccumSize['GAIA'],dtype='f8')
+            AccumDataVHS[Col]=np.zeros(AccumSize['VHS'],dtype='f8')
 
         print(AccumDataAll['sn'].size)
-        print(AccumDataCut['sn'].size)
-        print(AccumDataCutVHS['sn'].size)
+        print(AccumDataGAIA['sn'].size)
+        print(AccumDataVHS['sn'].size)
 
         ctr_all=0
-        ctr_cut=0
-        ctr_cut_vhs=0
+        ctr_gaia=0
+        ctr_vhs=0
         for Cat in grp_list:
             key_array=diag_cat[Cat]['FLUX_AUTO']/diag_cat[Cat]['FLUXERR_AUTO']
-            AccumDataAll['sn'][ctr_all:ctr_all+key_array.size]=key_array
+            ks=key_array.size
+            AccumDataAll['sn'][ctr_all:ctr_all+ks]=key_array
             key_array=diag_cat[Cat]['SPREAD_MODEL']
-            AccumDataAll['spread_model'][ctr_all:ctr_all+key_array.size]=key_array
+            AccumDataAll['spread_model'][ctr_all:ctr_all+ks]=key_array
             key_array=diag_cat[Cat]['FLUX_RADIUS']
-            AccumDataAll['flux_radius'][ctr_all:ctr_all+key_array.size]=key_array
-            ctr_all+=key_array.size
+            AccumDataAll['flux_radius'][ctr_all:ctr_all+ks]=key_array
+            ctr_all+=ks
 
-            key_array=kept_cat[Cat]['FLUX_AUTO']/kept_cat[Cat]['FLUXERR_AUTO']
-            AccumDataCut['sn'][ctr_cut:ctr_cut+key_array.size]=key_array
-            key_array=kept_cat[Cat]['SPREAD_MODEL']
-            AccumDataCut['spread_model'][ctr_cut:ctr_cut+key_array.size]=key_array
-            key_array=kept_cat[Cat]['FLUX_RADIUS']
-            AccumDataCut['flux_radius'][ctr_cut:ctr_cut+key_array.size]=key_array
-            ctr_cut+=key_array.size
+            key_array=kept_cat_GAIA[Cat]['FLUX_AUTO']/kept_cat_GAIA[Cat]['FLUXERR_AUTO']
+            ks=key_array.size
+            AccumDataGAIA['sn'][ctr_gaia:ctr_gaia+ks]=key_array
+            key_array=kept_cat_GAIA[Cat]['SPREAD_MODEL']
+            AccumDataGAIA['spread_model'][ctr_gaia:ctr_gaia+ks]=key_array
+            key_array=kept_cat_GAIA[Cat]['FLUX_RADIUS']
+            AccumDataGAIA['flux_radius'][ctr_gaia:ctr_gaia+ks]=key_array
+            ctr_gaia+=ks
 
             if (checkVHS):
                 key_array=kept_cat_VHS[Cat]['FLUX_AUTO']/kept_cat_VHS[Cat]['FLUXERR_AUTO']
-                AccumDataCutVHS['sn'][ctr_cut_vhs:ctr_cut_vhs+key_array.size]=key_array
+                ks=key_array.size
+                AccumDataVHS['sn'][ctr_vhs:ctr_vhs+ks]=key_array
                 key_array=kept_cat_VHS[Cat]['SPREAD_MODEL']
-                AccumDataCutVHS['spread_model'][ctr_cut_vhs:ctr_cut_vhs+key_array.size]=key_array
+                AccumDataVHS['spread_model'][ctr_vhs:ctr_vhs+ks]=key_array
                 key_array=kept_cat_VHS[Cat]['FLUX_RADIUS']
-                AccumDataCutVHS['flux_radius'][ctr_cut_vhs:ctr_cut_vhs+key_array.size]=key_array
-                ctr_cut_vhs+=key_array.size
+                AccumDataVHS['flux_radius'][ctr_vhs:ctr_vhs+ks]=key_array
+                ctr_vhs+=ks
 
-#        wsm=np.where(AccumDataCut['spread_model']>0.005)
-#        print("Interloper w/ SPREAD_MODEL>0.005: {:d}".format(AccumDataCut['spread_model'][wsm].size))
-#
-#        avg_size,med_size,std_size=medclip(AccumDataCut['flux_radius'],verbose=0)
-#        print("Size (avg,med,RMS): {:8.2f} {:8.2f} {:8.4f} ".format(avg_size,med_size,std_size))
-#        min_size=avg_size-(3.0*std_size)
-#        max_size=avg_size+(3.0*std_size)
-#        wsm=np.where(np.logical_and(AccumDataCut['flux_radius']>min_size,AccumDataCut['flux_radius']<max_size))
-#        min_sn=np.amin(AccumDataCut['sn'][wsm])
-#        max_sn=np.amax(AccumDataCut['sn'][wsm])
-#        print("size range: {:8.2f} {:8.2f}  s/n range: {:8.1f} {:8.1f} ".format(min_size,max_size,min_sn,max_sn))
-#        print(" N GAIA(input): {:7d} ".format(AccumDataCut['sn'].size))
-#        print(" N GAIA: {:7d} ".format(AccumDataCut['sn'][wsm].size))
-#
-#        min_sn=np.amin(AccumDataCut['sn'][wsm])
-#        max_sn=np.amax(AccumDataCut['sn'][wsm])
-#
-#        wsm=np.where(np.logical_and(np.logical_and(AccumDataAll['flux_radius']>min_size,AccumDataAll['flux_radius']<max_size),
-#                                    np.logical_and(AccumDataAll['sn']>min_sn,AccumDataAll['sn']<max_sn)))
-#        print(" N DES: {:7d} ".format(AccumDataAll['sn'][wsm].size))
-
-        qa.plot_selection('{:s}'.format(args.qa_select),AccumDataAll,AccumDataCut,AccumDataCutVHS)
+        qa.plot_selection2('{:s}'.format(args.qa_select),AccumDataAll,AccumDataGAIA,AccumDataVHS)
 
     if (args.qa_dist is not None):
         data={}
@@ -775,20 +767,24 @@ if __name__ == "__main__":
         data['n_vhs']={}
 
         for Cat in MetaCat:
-            data['m_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['med_GM_size']
-            data['s_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['std_GM_size']
-            data['n_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['nm_GAIA_cut']
-            if ('med_VM_size' in MetaCat[Cat]):
-                data['m_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['med_VM_size']
-            if ('std_VM_size' in MetaCat[Cat]):
-                data['s_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['std_VM_size']
-            if ('med_VM_size' in MetaCat[Cat]):
-                data['n_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['nm_VHS_cut']
+            data['m_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['GAIA']['med_size']
+            data['s_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['GAIA']['std_size']
+            data['n_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['GAIA']['nm_cut']
+            if (checkVHS):
+                if (MetaCat[Cat]['VHS']['med_size']>0):
+                    data['m_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['VHS']['med_size']
+                if (MetaCat[Cat]['VHS']['std_size']>0):
+                    data['s_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['VHS']['std_size']
+                if (MetaCat[Cat]['VHS']['nm_cut']>0):
+                    data['n_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['VHS']['nm_cut']
             if ('EXPNUM' in MetaCat[Cat]):
                 data['EXPNUM']=MetaCat[Cat]['EXPNUM']
-
+        
         qa.plot_FP_quant('{:s}'.format(args.qa_dist),data)
 
+#
+#   Write out the GAIA selected entries 
+#
 
     for Cat in grp_list:
         oname='{odir:s}/D{exp:08d}_{band:s}_c{ccd:02d}_r{reqnum:04d}p{attnum:02d}_{osuf:s}.fits'.format(
@@ -799,30 +795,17 @@ if __name__ == "__main__":
             reqnum=args.reqnum,
             attnum=args.attnum,
             osuf=args.suffix)
-        print(oname)
         ofits = fitsio.FITS(oname,'rw',clobber=True)
-        ofits.write(kept_cat[Cat],names=DESColList,extname='OBJECTS')
-        ofits[0].write_key('OBJECTS',kept_cat[Cat]['XWIN_IMAGE'].size,comment=None)
+        print("Writing GAIA subselected catalog (expnum,ccdnum,#entries,filename): {exp:8d} {ccd:02d} {num:5d} {fn:s} ".format(
+            exp=MetaCat[Cat]['EXPNUM'],
+            ccd=MetaCat[Cat]['CCDNUM'],
+            num=kept_cat_GAIA[Cat][DESColList[0]].size,
+            fn=oname))
+        ofits.write(kept_cat_GAIA[Cat],names=DESColList,extname='OBJECTS')
+        ofits[0].write_key('OBJECTS',kept_cat_GAIA[Cat][DESColList[0]].size,comment=None)
         ofits.close()
 
-#        if (checkVHS):
-#            oname=re.sub("_red-fullcat.fits","_piffcat_vhs.fits",Cat)
-#            ofits = fitsio.FITS(oname,'rw',clobber=True)
-#            ofits.write(kept_cat_VHS[Cat],names=DESColList,extname='OBJECTS')
-#            ofits[0].write_key('OBJECTS',kept_cat_VHS[Cat]['XWIN_IMAGE'].size,comment=None)
-#            ofits.close()
-
-#    print(DFP.fp_layout)
 
     exit(0)
-
-
-#        print("Post GAIA: {:d}".format(kept_cat[Cat][DESColList[0]].size))
-#        wsm=np.where(kept_cat[Cat]['FLAGS']==0)
-#        print("Post GAIA [FLAGS=0]: {:d}".format(kept_cat[Cat][DESColList[0]][wsm].size))
-#        wsm=np.where(kept_cat[Cat]['IMAFLAGS_ISO']==0)
-#        print("Post GAIA [IMAFLAGS_ISO=0]: {:d}".format(kept_cat[Cat][DESColList[0]][wsm].size))
-#        wsm=np.where((kept_cat[Cat]['FLUX_AUTO']/kept_cat[Cat]['FLUXERR_AUTO'])>args.sncut)
-#        print("Post GAIA [S/N > {:.1f}]: {:d}".format(args.sncut,kept_cat[Cat][DESColList[0]][wsm].size))
 
 
