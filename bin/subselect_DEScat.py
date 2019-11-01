@@ -803,6 +803,9 @@ if __name__ == "__main__":
             fn=oname))
         ofits.write(kept_cat_GAIA[Cat],names=DESColList,extname='OBJECTS')
         ofits[0].write_key('OBJECTS',kept_cat_GAIA[Cat][DESColList[0]].size,comment=None)
+        ofits[0].write_key('BAND',MetaCat[Cat]['BAND'],comment='Short name for filter')
+        ofits[0].write_key('EXPNUM',MetaCat[Cat]['EXPNUM'],comment='DECam Exposure Number')
+        ofits[0].write_key('CCDNUM',MetaCat[Cat]['CCDNUM'],comment='CCD Number')
         ofits.close()
 
 
