@@ -140,7 +140,7 @@ def check_PIFF_data(fname,img,nsides=[64,16384,65536],blocksize=128,verbose=0):
     xpos=np.arange(blocksize/2.0,2048,blocksize)
     ypos=np.arange(blocksize/2.0,4096,blocksize)
     fwhm_im,g2_im=pqu.get_piff_size(psf,xpos,ypos,verbose=verbose)
-    piff_result['fwhm_map']={'bs':blocksize,'xpos':xpos,'ypos':ypos,'fwhm':fwhm_im,
+    piff_result['fwhm_map']={'bs':blocksize,'xpos':xpos,'ypos':ypos,'fwhm':fwhm_im*pixel_scale,
         'g2_amp':g2_im['amp'],'g2_x0':g2_im['x0'],'g2_y0':g2_im['y0'],'g2_sx':g2_im['sx'],'g2_sy':g2_im['sy'],'g2_the':g2_im['theta'],'g2_off':g2_im['off']}
 #        'x2':g2_im['x2'],'y2':g2_im['y2']}
     print("Elapsed time to sample PIFF model across CCD: {:.2f}".format(time.time()-t0))
@@ -492,7 +492,12 @@ if __name__ == "__main__":
     qa_result=examine_fit_outliers(qa_result,sigout=args.out_thresh,verbose=args.verbose)
 
     if (args.updateDB):
-        dbh = despydb.desdbi.DesDbi(None,args.section,retry=True)
+        try:
+            desdmfile = os.environ["des_services"]
+        except KeyError:
+            desdmfile = None
+        dbh = despydb.desdbi.DesDbi(desdmfile,args.section,retry=True)
+
         nval1,nval2=pqi.ingest_piff_qa(qa_result,args.qa_table,args.qa_star_table,dbh,dbSchema,verbose=verbose)
         dbh.close()
 #

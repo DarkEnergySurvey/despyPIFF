@@ -115,15 +115,14 @@ def plot_FP_QA(fname,qa_result,verbose=0):
 #   Note the following would have been for the simple (FWHM plot that has been remove below)
 #   Clip extent of values to those within +/- 5 sigma 
 #
-#    z1_a,z1_m,z1_s=pqu.medclip(tmp_z1,clipsig=5.0,verbose=0)
-#    z1_min=z1_a-(5.0*z1_s)
-#    z1_max=z1_a+(5.0*z1_s)
-#    print(z1_a,z1_m,z1_s,z1_min,z1_max)
-#    wsm=np.where(tmp_z1>z1_max)
-#    tmp_z1[wsm]=z1_max
-#    wsm=np.where(tmp_z1<z1_min)
-#    tmp_z1[wsm]=z1_min
-
+    z1_a,z1_m,z1_s=pqu.medclip(tmp_z1,clipsig=5.0,verbose=0)
+    z1_min=z1_a-(5.0*z1_s)
+    z1_max=z1_a+(5.0*z1_s)
+    print(z1_a,z1_m,z1_s,z1_min,z1_max)
+    wsm=np.where(tmp_z1>z1_max)
+    tmp_z1[wsm]=z1_max
+    wsm=np.where(tmp_z1<z1_min)
+    tmp_z1[wsm]=z1_min
 #
 #   Form polygons
 #
@@ -132,28 +131,10 @@ def plot_FP_QA(fname,qa_result,verbose=0):
     pols=zip(x_box,y_box)
     pols=np.swapaxes(pols,0,2)
     pols=np.swapaxes(pols,1,2)
-##
-##   Plot simple version... just the FWHM across the focal plane
-##
-#    plt.figure(figsize=(6,9),dpi=90)
-#    plt.rc('font',size=8)
-#    cm=plt.get_cmap("rainbow")
-#
-#    ax=plt.subplot(2,1,1)
-#    ax.axis([28672,1,28762,1])
-#    ax.set_aspect(1.0)
-#    coll=PolyCollection(pols,array=tmp_z1,cmap=cm,edgecolor='none',zorder=2)
-#    plt.gca().add_collection(coll)
-#    plt.colorbar(coll,ax=ax)
-#    plt.title('Gauss Fit(PIFF_PSF)')
-#
-#    plt.savefig('junk_FP_width.png')
-#    plt.close()
 
     plt.figure(figsize=(12,9),dpi=90)
     plt.rc('font',size=8)
     cm=plt.get_cmap("rainbow")
-
 #
 #   Set outliers to max and min values....
 #
@@ -179,6 +160,17 @@ def plot_FP_QA(fname,qa_result,verbose=0):
         plt.gca().add_collection(coll2)
         plt.colorbar(coll2,ax=ax)
         plt.title(g2par)
+#
+#   plot of FWHM
+#
+    ax=plt.subplot(3,3,8)
+    ax.axis([28672,1,28762,1])
+    ax.set_aspect(1.0)
+    coll=PolyCollection(pols,array=tmp_z1,cmap=cm,edgecolor='none',zorder=2)
+    plt.gca().add_collection(coll)
+    plt.colorbar(coll,ax=ax)
+    plt.title('FWHM')
+#
 #
 #   Stellar distribution plot
 #
@@ -206,7 +198,7 @@ def plot_FP_QA(fname,qa_result,verbose=0):
         ystar[ctr:ctr+ks]=ka
         ctr+=ks
 
-    ax=plt.subplot(3,3,8)
+    ax=plt.subplot(3,3,9)
     ax.axis([28672,1,28762,1])
     ax.set_aspect(1.0)
     plt.scatter(ystar,xstar,1,marker='.',color='blue')
