@@ -2,6 +2,8 @@ setupRequired(numpy 1.11.3+0)
 setupRequired(fitsio 1.0.4+1)
 setupRequired(despydb 2.0.5+0)
 setupRequired(despymisc 1.0.4+2)
+setupRequired(healpy 1.8.1+11)
+setupRequired(ngmix 1.3.3+0)
 
 envAppend(PYTHONPATH, ${PRODUCT_DIR}/python)
 envAppend(PATH, ${PRODUCT_DIR}/bin)
