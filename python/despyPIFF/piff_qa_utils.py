@@ -10,7 +10,6 @@
 
 from __future__ import print_function
 import time
-#import datetime
 import sys
 import numpy as np
 import fitsio
@@ -182,29 +181,40 @@ def get_piff_size(psf,xpos,ypos,verbose=0):
 #
             z0=im.array.reshape(im.array.size)
             e_guess=[amp_guess,px0,py0,sig_guess,sig_guess,0.0,0.0]
-            xdata_tuple=(px, py) 
-            popt3,pcov3=curve_fit(twoD_Gaussian,xdata_tuple, z0, p0=e_guess, sigma=s0, absolute_sigma=False)
-            perr3 = np.sqrt(np.diag(pcov3))
-#           Force position angle fall in the range +/-pi
-            angle=popt3[5];
-            n2pi=np.rint(angle/(np.pi))
-            angle=angle-(n2pi*np.pi)
+            xdata_tuple=(px, py)
+            try:
+                popt3,pcov3=curve_fit(twoD_Gaussian,xdata_tuple, z0, p0=e_guess, sigma=s0, absolute_sigma=False)
+                perr3 = np.sqrt(np.diag(pcov3))
+#               Force position angle fall in the range +/-pi
+                angle=popt3[5];
+                n2pi=np.rint(angle/(np.pi))
+                angle=angle-(n2pi*np.pi)
 
-            if (verbose > 2):
-                print("ix,iy={:d},{:d}".format(ix,iy))
-                print(" Floating elliptical Gauss FIT results (amp, x0, y0, sigx, sigy, theta, bkg): {:.3f} {:6.3f} {:6.3f} {:.3f} {:.3f} {:6.3f} {:.3f} ".format(
-                    popt3[0],popt3[1]-px0,popt3[2]-py0,popt3[3],popt3[4],angle,popt3[6]))
-                print(" Floating elliptical Gauss FIT results                           perr(covar): {:.3f} {:6.3f} {:6.3f} {:.3f} {:.3f} {:6.3f} {:.3f} ".format(
-                    perr3[0],perr3[1],perr3[2],perr3[3],perr3[4],perr3[5],perr3[6]))
+                if (verbose > 2):
+                    print("ix,iy={:d},{:d}".format(ix,iy))
+                    print(" Floating elliptical Gauss FIT results (amp, x0, y0, sigx, sigy, theta, bkg): {:.3f} {:6.3f} {:6.3f} {:.3f} {:.3f} {:6.3f} {:.3f} ".format(
+                        popt3[0],popt3[1]-px0,popt3[2]-py0,popt3[3],popt3[4],angle,popt3[6]))
+                    print(" Floating elliptical Gauss FIT results                           perr(covar): {:.3f} {:6.3f} {:6.3f} {:.3f} {:.3f} {:6.3f} {:.3f} ".format(
+                        perr3[0],perr3[1],perr3[2],perr3[3],perr3[4],perr3[5],perr3[6]))
 
-            g2_amp[ix,iy]=popt3[0]
-            g2_x0[ix,iy]=popt3[1]-px0
-            g2_y0[ix,iy]=popt3[2]-py0
-            g2_sx[ix,iy]=popt3[3]*2.35482
-            g2_sy[ix,iy]=popt3[4]*2.35482
-            g2_the[ix,iy]=angle
-            g2_off[ix,iy]=popt3[6]
-            fwhm[ix,iy]=2.35482*0.5*(np.abs(popt3[3])+np.abs(popt3[4]))
+                g2_amp[ix,iy]=popt3[0]
+                g2_x0[ix,iy]=popt3[1]-px0
+                g2_y0[ix,iy]=popt3[2]-py0
+                g2_sx[ix,iy]=popt3[3]*2.35482
+                g2_sy[ix,iy]=popt3[4]*2.35482
+                g2_the[ix,iy]=angle
+                g2_off[ix,iy]=popt3[6]
+                fwhm[ix,iy]=2.35482*0.5*(np.abs(popt3[3])+np.abs(popt3[4]))
+            except Exception as e:
+                print("Exception: ",e)
+                g2_amp[ix,iy]=-1.0
+                g2_x0[ix,iy]=-99.0
+                g2_y0[ix,iy]=-99.0
+                g2_sx[ix,iy]=-99.0
+                g2_sy[ix,iy]=-99.0
+                g2_the[ix,iy]=-99.0
+                g2_off[ix,iy]=-99.0
+                fwhm[ix,iy]=-99.0
 
 #   Done, package fit results so that they can be preserved for QA plots and outlier examination
 

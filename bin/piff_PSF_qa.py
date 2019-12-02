@@ -13,7 +13,6 @@ import argparse
 import os
 import re
 import time
-#import datetime
 import sys
 import numpy as np
 import fitsio
@@ -24,8 +23,7 @@ import despyPIFF.piff_qa_plot   as pqp
 import despyPIFF.piff_qa_utils  as pqu
 import despyPIFF.piff_qa_ingest as pqi
 
-from scipy.optimize import curve_fit
-
+#from scipy.optimize import curve_fit
 
 #import matplotlib
 #matplotlib.use('Agg')

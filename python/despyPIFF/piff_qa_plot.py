@@ -135,10 +135,11 @@ def plot_FP_QA(fname,qa_result,verbose=0):
     plt.figure(figsize=(12,9),dpi=90)
     plt.rc('font',size=8)
     cm=plt.get_cmap("rainbow")
-#
-#   Set outliers to max and min values....
-#
+
     for g2par in g2_list:
+#
+#       Set outliers to max and min values....
+#
         if (g2_norm[g2par]):
             try:
                 z2_min=qa_result['outland'][g2par]['min_out']
@@ -153,6 +154,17 @@ def plot_FP_QA(fname,qa_result,verbose=0):
             tmp_z2[g2par][wsm]=z2_max
             wsm=np.where(tmp_z2[g2par]<z2_min)
             tmp_z2[g2par][wsm]=z2_min
+        else:
+            if (g2par == "g2_the"):
+                z2_min=-np.pi/2.0
+                z2_max=np.pi/2.0
+                wsm=np.where(tmp_z2[g2par]>z2_max)
+                tmp_z2[g2par][wsm]=z2_max
+                wsm=np.where(tmp_z2[g2par]<z2_min)
+                tmp_z2[g2par][wsm]=z2_min
+#
+#       Go ahead and plot
+#
         ax=plt.subplot(3,3,g2_dict[g2par])
         ax.axis([28672,1,28762,1])
         ax.set_aspect(1.0)
