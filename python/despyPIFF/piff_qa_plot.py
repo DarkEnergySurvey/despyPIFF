@@ -9,26 +9,16 @@
 """
 
 from __future__ import print_function
-import time
-import sys
 import numpy as np
 
-#import despyPIFF.quick_stat as qs
 import despyPIFF.DECam_focal_plane as DFP
 import despyPIFF.piff_qa_utils as pqu
-
-#from scipy.optimize import curve_fit
 
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from matplotlib.patches import Polygon
-
-#import piff
-#import galsim
-#from ngmix import priors, joint_prior
-#import ngmix 
 
 #########################################
 def plot_FP_QA(fname,qa_result,verbose=0):
