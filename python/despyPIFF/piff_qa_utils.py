@@ -35,7 +35,7 @@ BLACK_FLAG_FACTOR = 512 # blacklist flags are this times the original exposure b
 pixel_scale = 0.263
 
 ###########################################
-def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,ftype='star',verbose=0):
+def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,rng=None,ftype='star',verbose=0):
 
     flag = 0
     dx, dy, g1, g2, flux = 0., 0., 0., 0., 0.
@@ -55,10 +55,10 @@ def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,ftype='star',verbose=0):
 #
 #       Setting up priors
 #
-        cen_prior=priors.CenPrior(0.0,0.0,pixel_scale,pixel_scale)
-        gprior=priors.GPriorBA(0.1)
-        Tprior=priors.LogNormal(T,0.2)
-        Fprior=priors.FlatPrior(-10.,1.e10)
+        cen_prior=priors.CenPrior(0.0,0.0,pixel_scale,pixel_scale,rng=rng)
+        gprior=priors.GPriorBA(0.1,rng=rng)
+        Tprior=priors.LogNormal(T,0.2,rng=rng)
+        Fprior=priors.FlatPrior(-10.,1.e10,rng=rng)
         prior=joint_prior.PriorSimpleSep(cen_prior,gprior,Tprior,Fprior)
 #
 #       Putting data in context for NGMIX
@@ -66,7 +66,7 @@ def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,ftype='star',verbose=0):
         jac=ngmix.Jacobian(wcs=wcs, x=cen.x + x - int(x+0.5), y=cen.y + y -int(y+0.5))
         obs=ngmix.Observation(image=im.array,weight=wt.array,jacobian=jac)
         lm_pars={'maxfev':4000}
-        runner=ngmix.bootstrap.PSFRunner(obs,'gauss',T,lm_pars,prior=prior)
+        runner=ngmix.bootstrap.PSFRunner(obs,'gauss',T,lm_pars,prior=prior,rng=rng)
         runner.go(ntry=3)
 #
 #       FIT

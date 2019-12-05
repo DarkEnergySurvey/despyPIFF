@@ -53,7 +53,7 @@ pixel_scale = 0.263
 
 
 ###########################################
-def check_PIFF_data(fname,img,nsides=[64,16384,65536],blocksize=128,verbose=0):
+def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,verbose=0):
 
     """Perform a series of checks and analyses on PSF model from PIFF
         Inputs:
@@ -176,6 +176,11 @@ def check_PIFF_data(fname,img,nsides=[64,16384,65536],blocksize=128,verbose=0):
     fwhm_guess=piff_result['fwhm']
     print("Using FWHM_guess={:.3f} corresponding to T={:.3f}".format(fwhm_guess, (fwhm_guess/ 2.35482)**2 * 2. ))
 
+    if (seed is None):
+        rng=None
+    else:
+        rng=np.random.RandomState(seed*piff_result['ccdnum']+piff_result['expnum'])
+
     if (verbose > 2):
         print("---------------------------------------------------------------------")
         print(" Star and model fits ")
@@ -196,8 +201,8 @@ def check_PIFF_data(fname,img,nsides=[64,16384,65536],blocksize=128,verbose=0):
         mod*=star_data['flux'][i]
         mwgt=wgt.copy()
 
-        s_dx[i],s_dy[i],s_e1[i],s_e2[i],s_T[i],s_flux[i],s_flag[i]=pqu.do_ngmix_fit(img,wgt,x0,y0,fwhm_guess,icnt=i,ftype='star ',verbose=verbose)
-        m_dx[i],m_dy[i],m_e1[i],m_e2[i],m_T[i],m_flux[i],m_flag[i]=pqu.do_ngmix_fit(mod,mwgt,x0,y0,fwhm_guess,icnt=i,ftype='model',verbose=verbose)
+        s_dx[i],s_dy[i],s_e1[i],s_e2[i],s_T[i],s_flux[i],s_flag[i]=pqu.do_ngmix_fit(img,wgt,x0,y0,fwhm_guess,icnt=i,rng=rng,ftype='star ',verbose=verbose)
+        m_dx[i],m_dy[i],m_e1[i],m_e2[i],m_T[i],m_flux[i],m_flag[i]=pqu.do_ngmix_fit(mod,mwgt,x0,y0,fwhm_guess,icnt=i,rng=rng,ftype='model',verbose=verbose)
 
 #
 #   NOTE: RA was coming from piffify in units of hours
@@ -388,7 +393,7 @@ if __name__ == "__main__":
     parser.add_argument('--qa_table',     action='store', type=str, default='PIFF_MODEL_QA', help='DB table to update with general QA (default=PIFF_MODEL_QA)')
     parser.add_argument('--qa_star_table',action='store', type=str, default='PIFF_STAR_QA',  help='DB table to update with stellar/model measurements (default=PIFF_STAR_QA)')
     parser.add_argument('--qa_plot',      action='store', type=str, default=None,            help='Filename for QA plot showing model across the focal plane (default: no plot)')
-
+    parser.add_argument('--seed',         action='store', type=int, default=None,            help='Seed for randoms in NGMIX (note uses SEED*CCDNUM+EXPNUM) default=None -> NGMIX chooses its own random... ie. non-reproducible results')
     parser.add_argument('-v','--verbose', action='store', type=int, default=0, help='Verbosity (defualt:0; currently values up to 2)')
     parser.add_argument('-T','--Timing',  action='store_true', default=False, help='If set timing information accompanies output')
     parser.add_argument('-s', '--section', action='store', type=str, default=None, help='section of .desservices file with connection info')
@@ -485,7 +490,7 @@ if __name__ == "__main__":
     for Cat in cat_list:
         print("##########################################################")
         print("Working on catalog: {:s} ".format(Cat))
-        qa_result[Cat]=check_PIFF_data(Cat,img_dict[Cat],nsides=nsides,verbose=args.verbose)
+        qa_result[Cat]=check_PIFF_data(Cat,img_dict[Cat],seed=args.seed,nsides=nsides,verbose=args.verbose)
 
     qa_result=examine_fit_outliers(qa_result,sigout=args.out_thresh,verbose=args.verbose)
 
