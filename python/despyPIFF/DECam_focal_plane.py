@@ -1,9 +1,4 @@
-#!/usr/bin/env python
-
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
+#!/usr/bin/env python3
 
 """A quick structure to hold the outline of the DECam focal plane
 """

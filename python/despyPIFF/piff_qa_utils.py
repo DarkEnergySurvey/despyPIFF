@@ -1,14 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
-
-"""Analyze PIFF model to provide QA feedback
+"""
+Analyze PIFF model to provide QA feedback
 """
 
-from __future__ import print_function
+#from __future__ import print_function
 import time
 import sys
 import numpy as np
@@ -55,30 +51,32 @@ def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,rng=None,ftype='star',verbose=0):
 #
 #       Setting up priors
 #
-        cen_prior=priors.CenPrior(0.0,0.0,pixel_scale,pixel_scale,rng=rng)
-        gprior=priors.GPriorBA(0.1,rng=rng)
-        Tprior=priors.LogNormal(T,0.2,rng=rng)
-        Fprior=priors.FlatPrior(-10.,1.e10,rng=rng)
-        prior=joint_prior.PriorSimpleSep(cen_prior,gprior,Tprior,Fprior)
+        cen_prior=ngmix.priors.CenPrior(0.0,0.0,pixel_scale,pixel_scale,rng=rng)
+        gprior=ngmix.priors.GPriorBA(0.1,rng=rng)
+        Tprior=ngmix.priors.LogNormal(T,0.2,rng=rng)
+        Fprior=ngmix.priors.FlatPrior(-10.,1.e10,rng=rng)
+        prior=ngmix.joint_prior.PriorSimpleSep(cen_prior,gprior,Tprior,Fprior)
 #
 #       Putting data in context for NGMIX
 #
         jac=ngmix.Jacobian(wcs=wcs, x=cen.x + x - int(x+0.5), y=cen.y + y -int(y+0.5))
         obs=ngmix.Observation(image=im.array,weight=wt.array,jacobian=jac)
-        lm_pars={'maxfev':4000}
-        runner=ngmix.bootstrap.PSFRunner(obs,'gauss',T,lm_pars,prior=prior,rng=rng)
-        runner.go(ntry=3)
-#
-#       FIT
-#
-        ngmix_flag=runner.fitter.get_result()['flags']
-        gmix=runner.fitter.get_gmix()
 
+        psf_fitter = ngmix.fitting.Fitter(model='gauss', prior=prior)
+        psf_guesser = ngmix.guessers.SimplePSFGuesser(rng=rng, guess_from_moms=True)
+        psf_runner = ngmix.runners.PSFRunner(fitter=psf_fitter, guesser=psf_guesser, ntry=3)    
+
+        res = psf_runner.go(obs=obs)
+        print(res)
+        ngmix_flag=res['flags']
         if (ngmix_flag != 0):
             flag |= BAD_MEASUREMENT
-        dx,dy=gmix.get_cen()
-        g1,g2,T=gmix.get_g1g2T()
-        flux=gmix.get_flux()/wcs.pixelArea()
+
+        dy = res['pars'][0]
+        dx = res['pars'][1]
+        T = res['T']
+        g1, g2 = res['g']
+        flux = res['flux']
 
         if (verbose > 2):
             print(" {:5d} {:5s} {:7.3f} {:7.3f} {:10.7f} {:10.7f} {:7.3f} {:3d} {:12.3f} ".format(icnt,ftype,dx,dy,g1,g2,T,flag,flux))
@@ -91,7 +89,7 @@ def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,rng=None,ftype='star',verbose=0):
 
 
 ########################################
-def get_piff_size(psf,xpos,ypos,verbose=0):
+def get_piff_size(psf,xpos,ypos,cnum=0,verbose=0):
  
     fwhm=np.zeros((xpos.size,ypos.size),dtype=np.float64)
     g2_amp=np.zeros((xpos.size,ypos.size),dtype=np.float64)
@@ -107,7 +105,7 @@ def get_piff_size(psf,xpos,ypos,verbose=0):
 
     for ix in range(xpos.size):
         for iy in range(ypos.size):
-            im=psf.draw(x=xpos[ix],y=ypos[iy],flux=1.0)
+            im=psf.draw(x=xpos[ix],y=ypos[iy],chipnum=cnum,flux=1.0)
 #            psf_im=im.array 
             nrow,ncol = im.array.shape
             px0=nrow/2.
@@ -215,17 +213,22 @@ def get_piff_size(psf,xpos,ypos,verbose=0):
 
     return fwhm,g2out
 
-
+#
+#   RAG desprecated 
+#   circularly symmetric, fixed center Gaussian case
 #########################################
-def rgauss(r,a,b,c):
-    return a*np.exp(-(r*r)/(2.*b*b))+c
+#def rgauss(r,a,b,c):
+#    return a*np.exp(-(r*r)/(2.*b*b))+c
 
+#   RAG desprecated 
+#   circularly symmetric, fitted center Gaussian case
 #########################################
-def rgauss2(xdata_tuple,a,x0,y0,b,c):
-    (x,y)=xdata_tuple
-    r2=((x-x0)**2)+((y-y0)**2)
-    return a*np.exp(-(r2)/(2.*b*b))+c
+#def rgauss2(xdata_tuple,a,x0,y0,b,c):
+#    (x,y)=xdata_tuple
+#    r2=((x-x0)**2)+((y-y0)**2)
+#    return a*np.exp(-(r2)/(2.*b*b))+c
 
+#   twoD-elliptical Gaussian with fitted center
 #########################################
 def twoD_Gaussian(xdata_tuple, amplitude, xo, yo, sigma_x, sigma_y, theta, offset):
     (x,y)=xdata_tuple
@@ -284,5 +287,4 @@ def medclip(data,clipsig=4.0,maxiter=10,converge_num=0.0001,verbose=0):
         print(iter+1,avgval,medval,sig)
 
     return avgval,medval,stdval
-
 

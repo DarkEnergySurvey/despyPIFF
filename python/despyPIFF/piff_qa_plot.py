@@ -1,14 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
-
-"""Analyze PIFF model to provide QA feedback
+"""
+QA plot routines supporting despyPIFF
 """
 
-from __future__ import print_function
+#from __future__ import print_function
 import numpy as np
 
 import despyPIFF.DECam_focal_plane as DFP
@@ -118,7 +114,7 @@ def plot_FP_QA(fname,qa_result,verbose=0):
 #
     y_box=np.array([tmp_x1,tmp_x2,tmp_x3,tmp_x4],'f4')
     x_box=np.array([tmp_y1,tmp_y2,tmp_y3,tmp_y4],'f4')
-    pols=zip(x_box,y_box)
+    pols=np.array(list(zip(x_box,y_box)))
     pols=np.swapaxes(pols,0,2)
     pols=np.swapaxes(pols,1,2)
 

@@ -1,14 +1,10 @@
-#!/usr/bin/env python
-
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
-
-"""Subselection of a DES (FINALCUT) catalog for use with PIFF
+#!/usr/bin/env python3
+"""
+Subselection of a DES (FINALCUT) catalog for use with PIFF
+Subselection uses GAIA DR2 (and potentially VHS) 
 """
 
-from __future__ import print_function
+#from __future__ import print_function
 import argparse
 import os
 import re
@@ -20,27 +16,27 @@ import numpy as np
 import fitsio
 
 import pandas as pd
-import despydb
+import despydb.desdbi
 from despyPIFF import subselect_QA as qa
+import despyPIFF.piff_qa_utils  as pqu
 
 from astropy.coordinates import SkyCoord
 from astropy import units as u
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from matplotlib.collections import PolyCollection
-from matplotlib.patches import Polygon
+#import matplotlib
+#matplotlib.use('Agg')
+#import matplotlib.pyplot as plt
+#from matplotlib.collections import PolyCollection
+#from matplotlib.patches import Polygon
 
 ###########################################
 def read_data(fname,ldac=False,hdu=1,verbose=0):
-
+    """
+    Read a DES catalog (and optionally the LDAC_IMHEAD that might be associated
+    """
     rfits=fitsio.FITS(fname,'r')
     if (ldac):
         ldachead=rfits[hdu-1].read()
-#        ldachead_cols=rfits[hdu-1].get_colnames()
-#        print(ldachead)
-#        print(ldachead_cols)
     cols=rfits[hdu].get_colnames()
     if (verbose > 0):
         print("Cols: ",cols)
@@ -52,52 +48,6 @@ def read_data(fname,ldac=False,hdu=1,verbose=0):
     else:
         return data,cols
 
-
-###########################################
-def medclip(data,clipsig=4.0,maxiter=10,converge_num=0.0001,verbose=0):
-    ct = data.size
-    iter = 0; c1 = 1.0 ; c2 = 0.0
-
-    avgval = np.mean(data)
-    medval = np.median(data)
-    sig = np.std(data)
-    wsm = np.where( abs(data-medval) < clipsig*sig )
-    if ((verbose > 0)and(verbose < 4)):
-        print("iter,avgval,medval,sig")
-    if ((verbose > 2)and(verbose < 4)):
-        print(0,avgval,medval,sig)
-    if (verbose > 3):
-        print("iter,avgval,medval,sig,ct,c1,c2")
-        print(0,avgval,medval,sig,ct,c1,c2)
-
-    while (c1 >= c2) and (iter < maxiter):
-        iter += 1
-        lastct = ct
-        avgval = np.mean(data[wsm])
-        medval = np.median(data[wsm])
-        sig = np.std(data[wsm])
-        wsm = np.where( abs(data-medval) < clipsig*sig )
-        ct = len(wsm[0])
-        if ct > 0:
-            c1 = abs(ct - lastct)
-            c2 = converge_num * lastct
-        if ((verbose > 2)and(verbose < 4)):
-            print(iter,avgval,medval,sig)
-#        print ct,c1,c2
-        if (verbose > 3):
-            print(iter,avgval,medval,sig,ct,c1,c2)
-#   End of while loop
-    if (iter >= maxiter):
-        print("Warning: medclip had not yet converged after {:d} iterations".format(iter))
-
-    medval = np.median(data[wsm])
-    avgval = np.mean(data[wsm])
-    stdval = np.std(data[wsm])
-    if (verbose > 0):
-        print(iter+1,avgval,medval,sig)
-
-    return avgval,medval,stdval
-  
 
 ######################################################################################
 def form_ExpCat(grp_list,DESColDict,verbose=0):
@@ -443,7 +393,7 @@ def MatchUndStellarSelect(c1,c2,InCat,c2name,ColDict,ColSize,SND,MatchRad=0.5,ve
 #
 #       Find typical size of objects... clip and get approrpriate range of sizes (for stellar locus)
 #
-        avg_size,med_size,std_size=medclip(ret_cat['FLUX_RADIUS'],verbose=0)
+        avg_size,med_size,std_size=pqu.medclip(ret_cat['FLUX_RADIUS'],verbose=0)
         min_size=avg_size-(3.0*std_size)
         max_size=avg_size+(3.0*std_size)
         DMCat['avg_size']=avg_size
@@ -474,7 +424,7 @@ def MatchUndStellarSelect(c1,c2,InCat,c2name,ColDict,ColSize,SND,MatchRad=0.5,ve
         tmp_sn=ret_cat['FLUX_AUTO']/ret_cat['FLUXERR_AUTO']
         wsm=np.where(np.logical_and(np.logical_and(ret_cat['FLUX_RADIUS']>min_size,ret_cat['FLUX_RADIUS']<max_size),
                                     np.logical_and(tmp_sn>min_sn,ret_cat['FLUX_AUTO']<max_flux_cut)))
-        for key in DESColDict:
+        for key in ColDict:
             ret_cat[key]=ret_cat[key][wsm]
         DMCat['nm_cut']=ret_cat[ColSize].size
 
@@ -519,7 +469,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     if (args.verbose > 0):
-        print("Args: {:s}".format(args))
+        print("Args: {:}".format(args))
 
 ##########################################################
 #   Handle simple args (verbose, Schema, bandlist)
@@ -595,7 +545,14 @@ if __name__ == "__main__":
 
 #   Setup DB connection if needed
     if ((args.useDB)or(args.checkVHS)):
-        dbh = despydb.desdbi.DesDbi(None,args.section,retry=True)
+        try:
+            desdmfile = os.environ["des_services"]
+        except KeyError:
+            desdmfile = None
+
+        dbh = despydb.desdbi.DesDbi(desdmfile,args.section,retry=True)
+#        cur = dbh.cursor()
+#        dbh = despydb.desdbi.DesDbi(None,args.section,retry=True)
 #
 #   Get GAIA data
 #
@@ -694,6 +651,7 @@ if __name__ == "__main__":
         print("   GAIA size: {:7.2f} {:7.2f} {:7.4f} -->  {:8.2f} {:8.2f} wS/N: {:8.1f} {:8.1f} ".format(
             MetaCat[Cat]['GAIA']['avg_size'],MetaCat[Cat]['GAIA']['med_size'],MetaCat[Cat]['GAIA']['std_size'],
             MetaCat[Cat]['GAIA']['min_size'],MetaCat[Cat]['GAIA']['max_size'],MetaCat[Cat]['GAIA']['min_sn'],MetaCat[Cat]['GAIA']['max_sn']))
+        print(" {:8.3} {:8.3f} ".format(np.amin(kept_cat_GAIA[Cat]['MAG_AUTO']),np.amax(kept_cat_GAIA[Cat]['MAG_AUTO'])))
         if (checkVHS):
             print("   VHS  size: {:7.2f} {:7.2f} {:7.4f} -->  {:8.2f} {:8.2f} wS/N: {:8.1f} {:8.1f} ".format(
                 MetaCat[Cat]['VHS']['avg_size'],MetaCat[Cat]['VHS']['med_size'],MetaCat[Cat]['VHS']['std_size'],
@@ -755,7 +713,7 @@ if __name__ == "__main__":
                 AccumDataVHS['flux_radius'][ctr_vhs:ctr_vhs+ks]=key_array
                 ctr_vhs+=ks
 
-        qa.plot_selection2('{:s}'.format(args.qa_select),AccumDataAll,AccumDataGAIA,AccumDataVHS)
+        qa.plot_selection3('{:s}'.format(args.qa_select),AccumDataAll,AccumDataGAIA,AccumDataVHS)
 
     if (args.qa_dist is not None):
         data={}
