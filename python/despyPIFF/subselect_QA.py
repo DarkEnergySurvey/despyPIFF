@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # $Id$
 # $Rev::                                  $:  # Revision of last commit.
@@ -8,7 +8,7 @@
 """Utilities for making QA plots when doing subselection for PIFF inputs.
 """
 
-from __future__ import print_function
+#from __future__ import print_function
 import numpy as np
 import despyPIFF.DECam_focal_plane as DFP
 
@@ -37,6 +37,7 @@ def quick_hess(xdata,ydata,axrange=None,nxbin=250,nybin=100,logx=False,logy=Fals
         xspace=np.linspace(xmin,xmax,nxbin)
     if (logy):
         yspace=np.logspace(np.log10(ymin),np.log10(ymax),nybin)
+        print(yspace)
     else:
         yspace=np.linspace(ymin,ymax,nybin)
 
@@ -96,6 +97,11 @@ def plot_selection(fname,data,dataCut,dataCutVHS,verbose=0):
 ########################################
 def plot_selection2(fname,data,dataCut,dataCutVHS,verbose=0):
 
+#
+#   Attempts too create a scalable 2-d histogram (i.e. forms an image so it can be rescaled)
+#   Current version does not functio (properly) after matplotlib upgrades.. :(
+#
+
     plt.figure(figsize=(8,8),dpi=90)
     plt.rc('font',size=9)
     plt.subplot()
@@ -103,11 +109,11 @@ def plot_selection2(fname,data,dataCut,dataCutVHS,verbose=0):
     plt.subplot(2,2,1)
     axrange=[-0.05,0.05,1.0,3.e4]
     H,xbins,ybins=quick_hess(data['spread_model'],data['sn'],axrange=axrange,logx=False,logy=True)
-    plt.yscale('log')
     wsm=np.where(H<0.1)
     H[wsm]=0.1
     plt.imshow(np.log10(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
     plt.scatter(dataCut['spread_model'],dataCut['sn'],1,marker='.',color='red')
+    plt.yscale('log')
     plt.axis(axrange)
     plt.title('GAIA_DR2 Selection')
     plt.xlabel('Spread_Model')
@@ -169,6 +175,80 @@ def plot_selection2(fname,data,dataCut,dataCutVHS,verbose=0):
 
 
 ########################################
+def plot_selection3(fname,data,dataCut,dataCutVHS,verbose=0):
+
+#
+#   version uses 2d-hist to get a proper plot but is no longer as facile with respect to scaling the grey levels
+#
+    plt.figure(figsize=(8,8),dpi=90)
+    plt.rc('font',size=9)
+    plt.subplot()
+
+    plt.subplot(2,2,1)
+    axrange=[-0.05,0.05,1.0,3.e4]
+    xspace=np.linspace(axrange[0],axrange[1],250)
+    yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
+    plt.hist2d(data['spread_model'],data['sn'],bins=(xspace,yspace),cmap="Greys")
+    plt.scatter(dataCut['spread_model'],dataCut['sn'],1,marker='.',color='red')
+    plt.yscale('log')
+    plt.axis(axrange)
+    plt.title('GAIA_DR2 Selection')
+    plt.xlabel('Spread_Model')
+    plt.ylabel('S/N')
+
+    plt.subplot(2,2,2)
+    axrange=[0.0,12.0,1.0,3.e4]
+    xspace=np.linspace(axrange[0],axrange[1],250)
+    yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
+    plt.hist2d(data['flux_radius'],data['sn'],bins=(xspace,yspace),cmap="Greys")
+    plt.scatter(dataCut['flux_radius'],dataCut['sn'],1,marker='.',color='red')
+    plt.yscale('log')
+    plt.axis(axrange)
+    plt.title('GAIA_DR2 Selection')
+    plt.xlabel('Flux_Radius[pix]')
+    plt.ylabel('S/N')
+
+    plt.subplot(2,2,3)
+    axrange=[-0.05,0.05,1.0,3.e4]
+    xspace=np.linspace(axrange[0],axrange[1],250)
+    yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
+    plt.hist2d(data['spread_model'],data['sn'],bins=(xspace,yspace),cmap="Greys")
+    if (dataCutVHS['sn'].size > 0):
+        plt.scatter(dataCutVHS['spread_model'],dataCutVHS['sn'],1,marker='.',color='red')
+    else:
+        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
+        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
+        plt.text(xtxt,ytxt,'No VHS matches',color='red')
+    plt.yscale('log')
+    plt.axis(axrange)
+    plt.title('VHS Selection')
+    plt.xlabel('Spread_Model')
+    plt.ylabel('S/N')
+
+    plt.subplot(2,2,4)
+    axrange=[0.0,12.0,1.0,3.e4]
+    xspace=np.linspace(axrange[0],axrange[1],250)
+    yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
+    plt.hist2d(data['flux_radius'],data['sn'],bins=(xspace,yspace),cmap="Greys")
+    if (dataCutVHS['sn'].size > 0):
+        plt.scatter(dataCutVHS['flux_radius'],dataCutVHS['sn'],1,marker='.',color='red')
+    else:
+        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
+        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
+        plt.text(xtxt,ytxt,'No VHS matches',color='red')
+    plt.yscale('log')
+    plt.axis(axrange)
+    plt.title('VHS Selection')
+    plt.xlabel('Flux_Radius[pix]')
+    plt.ylabel('S/N')
+
+    plt.savefig(fname)
+    plt.close()
+
+    return 0
+
+
+########################################
 def plot_FP_quant(fname,data,verbose=0):
 
     tmp_x1=np.array([DFP.DECam_FP_layout[ccd]['x1'] for ccd in range(1,63) if (ccd in data['m_gaia'])])
@@ -181,7 +261,7 @@ def plot_FP_quant(fname,data,verbose=0):
     tmp_y4=np.array([DFP.DECam_FP_layout[ccd]['y2'] for ccd in range(1,63) if (ccd in data['m_gaia'])])
     y_box=np.array([tmp_x1,tmp_x2,tmp_x3,tmp_x4],'f4')
     x_box=np.array([tmp_y1,tmp_y2,tmp_y3,tmp_y4],'f4')
-    pols=zip(x_box,y_box)
+    pols=np.array(list(zip(x_box,y_box)))
     pols=np.swapaxes(pols,0,2)
     pols=np.swapaxes(pols,1,2)
 
@@ -228,7 +308,7 @@ def plot_FP_quant(fname,data,verbose=0):
     tmp_y4=np.array([DFP.DECam_FP_layout[ccd]['y2'] for ccd in range(1,63) if (ccd in data['m_vhs'])])
     y_box=np.array([tmp_x1,tmp_x2,tmp_x3,tmp_x4],'f4')
     x_box=np.array([tmp_y1,tmp_y2,tmp_y3,tmp_y4],'f4')
-    pols=zip(x_box,y_box)
+    pols=np.array(list(zip(x_box,y_box)))
     pols=np.swapaxes(pols,0,2)
     pols=np.swapaxes(pols,1,2)
 

@@ -1,11 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
-
-"""Ingestion function(s) for PIFF QA
+"""
+Ingestion function(s) for PIFF QA
 """
 
 #################################
@@ -37,7 +33,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
 #
 #   First the MODEL_QA table (one row per CCD)
 #   
-    DBorder_QA=['FILENAME','EXPNUM','CCDNUM','NSTAR','NREMOVED','CHISQ','FWHM_CEN','FRAC_CEN_OUT','FRAC_WIDTH_OUT',
+    DBorder_QA=['FILENAME','EXPNUM','CCDNUM','NSTAR','NREMOVED','CHISQ','DOF','FWHM_CEN','FRAC_CEN_OUT','FRAC_WIDTH_OUT',
                 'STAR_E1_MEAN','STAR_E1_STD','STAR_E2_MEAN','STAR_E2_STD','STAR_T_MEAN','STAR_T_STD','STAR_NFIT',
                 'MODEL_E1_MEAN','MODEL_E1_STD','MODEL_E2_MEAN','MODEL_E2_STD','MODEL_T_MEAN','MODEL_T_STD','MODEL_NFIT',
                 'FLAG']
@@ -46,7 +42,6 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
     for Cat in CatList:
         new_row=[]
         filename=Cat.split("/")[-1]
-#        print(filename)
         new_row.append(filename)
         for key in DBorder_QA[1:]:
             if (key == 'FILENAME'):
@@ -55,7 +50,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
                 new_row.append(data[Cat]['fwhm'])
             else:
                 new_row.append(data[Cat][key.lower()])
-#            print(new_row)
+#                print(key,type(data[Cat][key.lower()]))
         new_data.append(new_row)
 
     dbh.insert_many(schema+QATab,DBorder_QA,new_data)
@@ -78,7 +73,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
         for i in range(data[Cat]['star_data']['x'].size):
             new_row=[filename,i+1,expnum,ccdnum]
             for col in ['x','y','ra','dec','flux','snr','s_e1','s_e2','s_T','s_flag','m_e1','m_e2','m_T','m_flag','hpix_64','hpix_16384','hpix_65536']:
-                if (col in ['s_flag','m_flag']):
+                if (col in ['s_flag','m_flag','hpix_64','hpix_16384','hpix_65536']):
                     new_row.append(int(data[Cat]['star_data'][col][i]))
                 else:
                     new_row.append(data[Cat]['star_data'][col][i])

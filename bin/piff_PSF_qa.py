@@ -1,14 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+"""
+Analyze PSF model result from PIFF, obtain and ingest QA metrics
+to provide feedback to downstream utilities.
 
-# $Id$
-# $Rev::                                  $:  # Revision of last commit.
-# $LastChangedBy::                        $:  # Author of last commit.
-# $LastChangedDate::                      $:  # Date of last commit.
-
-"""Analyze PIFF model to provide QA feedback
+Original code from DESDM SVN by Robert Gruendl
+Ported to git by Felipe Menanteau
+Updated to python 3 version by Robert Gruendl
 """
 
-from __future__ import print_function
+#from __future__ import print_function
 import argparse
 import os
 import re
@@ -73,8 +73,16 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
     piff_result={}
     rfits=fitsio.FITS(fname,'r')
     h0=rfits[0].read_header()
-    piff_result['expnum']=int(h0['EXPNUM'])
-    piff_result['ccdnum']=int(h0['CCDNUM'])
+    if ('expnum' in h0):
+        piff_result['expnum']=int(h0['EXPNUM'])
+    else:
+        print("Warning! EXPNUM not present in primary HDU.  Using a value of -1 to continue will likely fail to ingest")
+        piff_result['expnum']=-1
+    if ('ccdnum' in h0):
+        piff_result['ccdnum']=int(h0['CCDNUM'])
+    else:
+        print("Warning! CCDNUM not present in primary HDU.  Will attempt too poll psfstars HDU.")
+        piff_result['ccdnum']=-1
 #
 #   Test 1:  Number of stars used
 #       FLAG = 2
@@ -91,6 +99,14 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
         piff_flag+=2
     rfits.close()
 
+    if (piff_result['ccdnum'] == -1):
+        chipnums=np.unique(star_data['chipnum'])
+        if (chipnums.size > 1):
+            print("Warning!  More than one CCDNUM present.  Will use first but expect anomalous results/plots.")
+        else:
+            print("CCDNUM quandry successfully resolved using value of: {:d}".format(int(chipnums[0])))
+        piff_result['ccdnum']=int(chipnums[0])
+
 #
 #   Test 2: Readable PSF (by PIFF)
 #       FLAG = 4
@@ -106,9 +122,9 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 #   Test 3:  Chisq vs DOF
 #       FLAG = 1
 #
-    piff_result['nremoved']=psf.nremoved
+    piff_result['nremoved']=int(psf.nremoved)
     piff_result['chisq']=psf.chisq
-    piff_result['dof']=psf.dof
+    piff_result['dof']=int(psf.dof)
     if (verbose > 0):
         print("  nstar removed: {:d} ".format(psf.nremoved))
     if (psf.chisq > 1.5*psf.dof):
@@ -127,7 +143,7 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 #
     xcen=np.array([1024.])
     ycen=np.array([2048.])
-    fwhm_cen,g2_cen=pqu.get_piff_size(psf,xcen,ycen,verbose=verbose)
+    fwhm_cen,g2_cen=pqu.get_piff_size(psf,xcen,ycen,cnum=piff_result['ccdnum'],verbose=verbose)
     piff_result['fwhm']=fwhm_cen[0,0]*pixel_scale
     print('Central model FWHM : {:.3f} '.format(piff_result['fwhm']))
 #
@@ -137,10 +153,9 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
     t0=time.time()
     xpos=np.arange(blocksize/2.0,2048,blocksize)
     ypos=np.arange(blocksize/2.0,4096,blocksize)
-    fwhm_im,g2_im=pqu.get_piff_size(psf,xpos,ypos,verbose=verbose)
+    fwhm_im,g2_im=pqu.get_piff_size(psf,xpos,ypos,cnum=piff_result['ccdnum'],verbose=verbose)
     piff_result['fwhm_map']={'bs':blocksize,'xpos':xpos,'ypos':ypos,'fwhm':fwhm_im*pixel_scale,
         'g2_amp':g2_im['amp'],'g2_x0':g2_im['x0'],'g2_y0':g2_im['y0'],'g2_sx':g2_im['sx'],'g2_sy':g2_im['sy'],'g2_the':g2_im['theta'],'g2_off':g2_im['off']}
-#        'x2':g2_im['x2'],'y2':g2_im['y2']}
     print("Elapsed time to sample PIFF model across CCD: {:.2f}".format(time.time()-t0))
 
 #
@@ -196,7 +211,7 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 
         img=full_img[b]
         wgt=full_wgt[b]
-        mod=psf.draw(x=x0,y=y0,image=img.copy())
+        mod=psf.draw(x=x0,y=y0,chipnum=star_data['chipnum'][i],image=img.copy())
 #        print("FLUX by sum on model: ",np.sum(mod.array))
         mod*=star_data['flux'][i]
         mwgt=wgt.copy()
@@ -402,7 +417,7 @@ if __name__ == "__main__":
     t00=time.time()
     args = parser.parse_args()
     if (args.verbose > 0):
-        print("Args: {:s}".format(args))
+        print("Args: {:}".format(args))
 
 ##########################################################
 #   Handle simple args (verbose, Schema, bandlist)
