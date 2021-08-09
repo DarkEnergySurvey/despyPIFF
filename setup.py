@@ -6,7 +6,7 @@ bin_files = glob.glob("bin/*.py")
 
 # The main call
 setup(name='despyPIFF',
-      version ='1.0.0',
+      version ='3.0.0',
       license = "GPL",
       description = "DESDM tools for PIFF",
       author = "Robert Gruendl",
@@ -16,4 +16,3 @@ setup(name='despyPIFF',
       scripts = bin_files,
       data_files=[('ups',['ups/despyPIFF.table'])],
       )
-
