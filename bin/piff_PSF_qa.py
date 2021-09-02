@@ -509,6 +509,19 @@ if __name__ == "__main__":
 
     qa_result=examine_fit_outliers(qa_result,sigout=args.out_thresh,verbose=args.verbose)
 
+#
+#   New rollup values mean and standard deviation of T aggregated over all CCDs excepting CCD=31.
+#
+    exp_star_t_val=[]
+    for Cat in cat_list:
+        if ('ccdnum' in qa_result[Cat]):
+            if (qa_result[Cat]['ccdnum']!=31):
+                exp_star_t_val.append(qa_result[Cat]['star_t_mean'])
+    est_val=np.array(exp_star_t_val)
+    qa_result['exp_star_t_mean']=est_val.mean()
+    qa_result['exp_star_t_std']=est_val.std()
+
+
     if (args.updateDB):
         try:
             desdmfile = os.environ["des_services"]

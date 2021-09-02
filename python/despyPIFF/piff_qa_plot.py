@@ -55,7 +55,7 @@ def plot_FP_QA(fname,qa_result,verbose=0):
 #
     cat_list=[]
     for Cat in qa_result:
-        if (Cat not in ['outland']):
+        if (Cat not in ['outland','exp_star_t_mean','exp_star_t_std']):
             cat_list.append(Cat)
 
     for Cat in cat_list:

@@ -63,11 +63,10 @@ def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,rng=None,ftype='star',verbose=0):
         obs=ngmix.Observation(image=im.array,weight=wt.array,jacobian=jac)
 
         psf_fitter = ngmix.fitting.Fitter(model='gauss', prior=prior)
-        psf_guesser = ngmix.guessers.SimplePSFGuesser(rng=rng, guess_from_moms=True)
+        psf_guesser = ngmix.guessers.SimplePSFGuesser(rng=rng, guess_from_moms=False)
         psf_runner = ngmix.runners.PSFRunner(fitter=psf_fitter, guesser=psf_guesser, ntry=3)    
 
         res = psf_runner.go(obs=obs)
-        print(res)
         ngmix_flag=res['flags']
         if (ngmix_flag != 0):
             flag |= BAD_MEASUREMENT
@@ -79,12 +78,12 @@ def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,rng=None,ftype='star',verbose=0):
         flux = res['flux']
 
         if (verbose > 2):
-            print(" {:5d} {:5s} {:7.3f} {:7.3f} {:10.7f} {:10.7f} {:7.3f} {:3d} {:12.3f} ".format(icnt,ftype,dx,dy,g1,g2,T,flag,flux))
+            print(" {:5d} {:5s} {:7.1f} {:7.1f} {:7.3f} {:7.3f} {:10.7f} {:10.7f} {:7.3f} {:3d} {:12.3f} ".format(icnt,ftype,x,y,dx,dy,g1,g2,T,flag,flux))
 
     except Exception as e:
         print("Exception: ",e)
         flag |= BAD_MEASUREMENT
-            
+
     return dx, dy, g1,g2, T, flux, flag
 
 

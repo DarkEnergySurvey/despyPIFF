@@ -27,7 +27,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
 #
     CatList=[]
     for Cat in data:
-        if (Cat not in ['outland']):
+        if (Cat not in ['outland','exp_star_t_mean','exp_star_t_std']):
             CatList.append(Cat)
 
 #
@@ -36,7 +36,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
     DBorder_QA=['FILENAME','EXPNUM','CCDNUM','NSTAR','NREMOVED','CHISQ','DOF','FWHM_CEN','FRAC_CEN_OUT','FRAC_WIDTH_OUT',
                 'STAR_E1_MEAN','STAR_E1_STD','STAR_E2_MEAN','STAR_E2_STD','STAR_T_MEAN','STAR_T_STD','STAR_NFIT',
                 'MODEL_E1_MEAN','MODEL_E1_STD','MODEL_E2_MEAN','MODEL_E2_STD','MODEL_T_MEAN','MODEL_T_STD','MODEL_NFIT',
-                'FLAG']
+                'FLAG','EXP_STAR_T_MEAN','EXP_STAR_T_STD']
 
     new_data=[] 
     for Cat in CatList:
@@ -48,7 +48,11 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
                 print("WTF!!!")
             if (key == 'FWHM_CEN'):
                 new_row.append(data[Cat]['fwhm'])
+            elif (key in ['EXP_STAR_T_MEAN','EXP_STAR_T_STD']):
+#                print("found {:s}".format(key))
+                new_row.append(data[key.lower()])
             else:
+#                print(key)
                 new_row.append(data[Cat][key.lower()])
 #                print(key,type(data[Cat][key.lower()]))
         new_data.append(new_row)
