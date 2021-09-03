@@ -225,7 +225,7 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
     if (verbose > 2):
         print("---------------------------------------------------------------------")
     piff_result['star_data']={'x':star_data['x'],'y':star_data['y'],'ra':15.0*star_data['ra'],'dec':star_data['dec'],'flux':star_data['flux'],'snr':star_data['snr'],
-                                's_e1':s_e1,'s_e2':s_e2,'s_T':s_T,'s_flag':s_flag,'m_e1':m_e1,'m_e2':s_e2,'m_T':m_T,'m_flag':m_flag}
+                                's_e1':s_e1,'s_e2':s_e2,'s_T':s_T,'s_flag':s_flag,'m_e1':m_e1,'m_e2':m_e2,'m_T':m_T,'m_flag':m_flag}
 
     print("Rolling up NGMIX fit statistics")
     wsm=np.where(s_flag == 0)
