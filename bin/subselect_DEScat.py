@@ -173,7 +173,7 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Form Query for case where RA ranges crosses RA=0h (not very good at poles)
 #
-        query="""select g.source_id,g.ra,g.dec
+        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id,g.ra,g.dec
             from des_admin.gaia_dr2 g
             where (g.ra < {r2:.6f} or g.ra > {r1:.6f})
                 and g.dec between {d1:.6f} and {d2:.6f}""".format(
@@ -185,7 +185,7 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Form query for normal workhorse case 
 #
-        query="""select g.source_id,g.ra,g.dec
+        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id,g.ra,g.dec
             from des_admin.gaia_dr2 g
             where g.ra between {r1:.6f} and {r2:.6f}
                 and g.dec between {d1:.6f} and {d2:.6f}""".format(
