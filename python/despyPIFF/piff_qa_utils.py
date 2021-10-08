@@ -88,7 +88,7 @@ def do_ngmix_fit(im,wt,x,y,fwhm,icnt=0,rng=None,ftype='star',verbose=0):
 
 
 ########################################
-def get_piff_size(psf,xpos,ypos,cnum=0,color=1.8,verbose=0):
+def get_piff_size(psf,xpos,ypos,cnum=0,cval=1.6,verbose=0):
  
     fwhm=np.zeros((xpos.size,ypos.size),dtype=np.float64)
     g2_amp=np.zeros((xpos.size,ypos.size),dtype=np.float64)
@@ -104,8 +104,8 @@ def get_piff_size(psf,xpos,ypos,cnum=0,color=1.8,verbose=0):
 
     for ix in range(xpos.size):
         for iy in range(ypos.size):
-            print(psf.interp_property_names)
-            im=psf.draw(x=xpos[ix],y=ypos[iy],chipnum=cnum,flux=1.0,GI_COLOR=1.6)
+#            print(psf.interp_property_names)
+            im=psf.draw(x=xpos[ix],y=ypos[iy],chipnum=cnum,flux=1.0,GI_COLOR=cval)
 #            psf_im=im.array 
             nrow,ncol = im.array.shape
             px0=nrow/2.
