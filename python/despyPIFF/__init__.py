@@ -4,7 +4,7 @@
 # $LastChangedDate::                      $:  # Date of last commit.
 
 __author__  = "Robert Gruendl"
-__version__ = '3.0.2'
+__version__ = '3.0.3'
 version = __version__
 
 """
