@@ -329,25 +329,104 @@ def get_VHS_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 
 
 ######################################################################################
-def MatchUndStellarSelect(c1,c2,InCat,c2name,ColDict,ColSize,SND,MatchRad=0.5,verbose=0):
+def get_Y6GoldPhot_GAIAObjects(SourceIDList,dbh,dbSchema,Timing=False,verbose=0):
+
+    """ Query code to obtain list of images that overlap another
+
+        Inputs:
+            SourceIDList: List (of Lists) that contain GAIA_DR2 SOURCE_IDs to search for pre-matched photometry.
+            dbh:       Database connection to be used
+            dbSchema:  Schema over which queries will occur.
+            verbose:   Integer setting level of verbosity when running.
+
+        Returns:
+            CatDict: Resulting Image dictionary
+    """
+
+    t0=time.time()
+
+#
+#   Establish a DB cursor
+#   Load the temp table...
+#
+    curDB = dbh.cursor()
+    curDB.execute('delete from GTT_ID')
+    # load ids into gtt_id table
+    print(f"# Loading GTT_ID table for secondary query with entries for {len(SourceIDList):d} images")
+    dbh.insert_many('GTT_ID', ['ID'], SourceIDList)
+
+#
+#   Form query and obtain pre-determined matches
+#
+
+    query="""select x.source_id,
+            y.PSF_FLUX_APER_8_G,y.PSF_FLUX_ERR_APER_8_G,y.PSF_FLUX_FLAGS_G,
+            y.PSF_FLUX_APER_8_R,y.PSF_FLUX_ERR_APER_8_R,y.PSF_FLUX_FLAGS_R,
+            y.PSF_FLUX_APER_8_I,y.PSF_FLUX_ERR_APER_8_I,y.PSF_FLUX_FLAGS_I,
+            y.PSF_FLUX_APER_8_Z,y.PSF_FLUX_ERR_APER_8_Z,y.PSF_FLUX_FLAGS_Z,
+            y.PSF_FLUX_APER_8_Y,y.PSF_FLUX_ERR_APER_8_Y,y.PSF_FLUX_FLAGS_Y
+        from Y6_GOLD_2_0 y, gaia_dr2_x_y6_gold_2_0 x, gtt_id g 
+        where g.id=x.source_id and x.coadd_object_id=y.coadd_object_id"""
+#
+    if (verbose > 0):
+        if (verbose == 1):
+            QueryLines=query.split('\n')
+            QueryOneLine='sql = '
+            for line in QueryLines:
+                QueryOneLine=QueryOneLine+" "+line.strip()
+            print("{:s}".format(QueryOneLine))
+        if (verbose > 1):
+            print("{:s}".format(query))
+
+    prefetch=100000
+    curDB.arraysize=int(prefetch)
+    curDB.execute(query)
+    desc = [d[0].lower() for d in curDB.description]
+
+    CatDict={}
+    for row in curDB:
+        rowd = dict(zip(desc, row))
+        source_id = rowd.pop('source_id')
+        CatDict[source_id] = rowd
+
+    curDB.close()
+
+    if (verbose>0):
+        print("# Number of DES objects found is {nval:d} ".format(nval=len(CatDict)))
+    if (Timing):
+        t1=time.time()
+        print(" Query execution time: {:.2f}".format(t1-t0))
+
+#
+#   Drop source_id since it was pulled from the dictionary contents and used as a key
+#
+    desc.remove('source_id')
+
+    return CatDict,desc
+
+
+######################################################################################
+def MatchUndStellarSelect(c1,c2,InCat1,InCat2,c2name,ColDict1,ColDict2,SND,MatchRad=0.5,verbose=0):
 
     """ Work Horse routine to match a pair of catalogs and then go through and refine 
         the entries based on size and signal-to-noise
 
         Inputs:
-            c1:         AstroPy SkyCoord struct for input catalog (InCat)
-            c2:         AstroPy SkyCoord struct for matching catalog
-            InCat:      The corresponding catalog that will be operated on
+            c1:         AstroPy SkyCoord struct for input catalog (InCat1)
+            c2:         AstroPy SkyCoord struct for matching catalog (InCat2)
+            InCat1:     The catalog corresponding to c1 that will be operated on
+            InCat2:     The catalog corresponding to c2 that will be operated on
             c2name:     Name/Identifier (for reporting and output dict) of the matching catalog
-            ColDict:    Dictionay of columns that will be carried forward from InCat
-            ColSize:    A column name in InCat that is used when probing output catalog size
+            ColDict1:    Dictionary/List of columns that will be carried forward from InCat
+            ColDict2:    Dictionary/List of columns that will be carried forward from InCat
+#            ColSize:    A column name in InCat that is used when probing output catalog size
             SND:        Dict containing attributes when making decisions about Signal-to-Noise Cuts
             MatchRad:   Radius [in arcseconds] to use when making a match (default=0.5)
             dbSchema:   Schema over which queries will occur.
             verbose:    Integer setting level of verbosity when running.
 
         Returns:
-            ret_cat:    Dict: Subset of InCat that matched c2 and survived further size/signal-to-noise cuts
+            ret_cat:    Dict: Subset of InCat1 and Incat2 that matched c2 and survived further size/signal-to-noise cuts
             DMCat:      Diagnostic/MetaData returned from matching
     """
 #
@@ -366,30 +445,44 @@ def MatchUndStellarSelect(c1,c2,InCat,c2name,ColDict,ColSize,SND,MatchRad=0.5,ve
            'max_sn':-1.,
            'max_flux_cut':-1.}
 #
+#   This is here to maintain some backward compatibility (so can accept a list or dict for ColDict1/2)
+#
+    if (isinstance(ColDict1,dict)):
+        keylist=[*ColDict1]
+        refkey=keylist[0]
+    else:
+        refkey=ColDict1[0]
+
+#
 #   Find entries in c1 that spatially match those in c2
 #
     idx2, d2d, d3d = c1.match_to_catalog_sky(c2)
-    idx1=np.arange(InCat[ColSize].size)
+    idx1=np.arange(InCat1[refkey].size)
     wsm=np.where(d2d.arcsecond<MatchRad)
     DMCat['nm']=idx1[wsm].size
 
     ret_cat={}
-    for key in ColDict:
-        ret_cat[key]=InCat[key][idx1[wsm]]
+    ret_col=[]
+    for key in ColDict1:
+        ret_cat[key]=InCat1[key][idx1[wsm]]
+        ret_col.append(key)
+    for key in ColDict2:
+        ret_cat[key]=InCat2[key][idx2[wsm]]
+        ret_col.append(key)
 #
 #   Remove FLAGGED and LOW signal-to-noise objects
 #   For the DIAGNOSTIC just remove flagged....
 #
     wsm=np.where(np.logical_and(np.logical_and(ret_cat['FLAGS']==0,ret_cat['IMAFLAGS_ISO']==0),
                                 ret_cat['FLUX_AUTO']/ret_cat['FLUXERR_AUTO']>SND['sncut']))
-    for key in ColDict:
+    for key in ret_col:
         ret_cat[key]=ret_cat[key][wsm]
-    DMCat['nm_cut0']=ret_cat[ColSize].size
+    DMCat['nm_cut0']=ret_cat[ret_col[0]].size
 
 #
 #   If there is still data present then go ahead and analyze size and signal-to-noise distributions...
 #
-    if (ret_cat[ColSize].size > 1):
+    if (ret_cat[ret_col[0]].size > 1):
 #
 #       Find typical size of objects... clip and get approrpriate range of sizes (for stellar locus)
 #
@@ -424,17 +517,17 @@ def MatchUndStellarSelect(c1,c2,InCat,c2name,ColDict,ColSize,SND,MatchRad=0.5,ve
         tmp_sn=ret_cat['FLUX_AUTO']/ret_cat['FLUXERR_AUTO']
         wsm=np.where(np.logical_and(np.logical_and(ret_cat['FLUX_RADIUS']>min_size,ret_cat['FLUX_RADIUS']<max_size),
                                     np.logical_and(tmp_sn>min_sn,ret_cat['FLUX_AUTO']<max_flux_cut)))
-        for key in ColDict:
+        for key in ret_col:
             ret_cat[key]=ret_cat[key][wsm]
-        DMCat['nm_cut']=ret_cat[ColSize].size
+        DMCat['nm_cut']=ret_cat[ret_col[0]].size
 
 #
 #       Look to get a sense whether there are objects that could be added back in
 #
-        tmp_sn=InCat['FLUX_AUTO']/InCat['FLUXERR_AUTO']
-        wsm=np.where(np.logical_and(np.logical_and(InCat['FLUX_RADIUS']>min_size,InCat['FLUX_RADIUS']<max_size),
-                                    np.logical_and(tmp_sn>min_sn,InCat['FLUX_AUTO']<max_flux_cut)))
-        DMCat['nm_add']=InCat[ColSize][wsm].size
+        tmp_sn=InCat1['FLUX_AUTO']/InCat1['FLUXERR_AUTO']
+        wsm=np.where(np.logical_and(np.logical_and(InCat1['FLUX_RADIUS']>min_size,InCat1['FLUX_RADIUS']<max_size),
+                                    np.logical_and(tmp_sn>min_sn,InCat1['FLUX_AUTO']<max_flux_cut)))
+        DMCat['nm_add']=InCat1[refkey][wsm].size
 
     return ret_cat,DMCat
 
@@ -458,6 +551,8 @@ if __name__ == "__main__":
     parser.add_argument('--remove_top_sn',action='store', type=float, default=1.2, help='Remove high signal-to-noise objects to avoid brighter-fatter biases (default=1.2 mag)')
     parser.add_argument('--top_sn_thresh',action='store', type=float, default=1.e3, help='Signal-to-noise threshold to be exceeded before bright objects are removed (default=1.e3)')
     parser.add_argument('--min_sn_add',   action='store', type=float, default=20., help='Signal-to-noise threshold to be exceeded before appropriately sized objects are added (default=20.)')
+    parser.add_argument('--color',        action='store', type=str, default='g-i', help='Color to write to output file (default=g-i; written as GI_COLOR)')
+    parser.add_argument('--sentinel_color',  action='store', type=float, default=1.6, help='Sentinel value to write for color (default=1.6)')
     parser.add_argument('--qa_select',    action='store', type=str, default=None, help='File name for selection QA plots')
     parser.add_argument('--qa_dist',      action='store', type=str, default=None, help='File name for distribution QA plots')
 
@@ -483,6 +578,13 @@ if __name__ == "__main__":
         dbSchema=""
     else:
         dbSchema="%s." % (args.Schema)
+#
+#   Break --color into a numerator and denominator
+#
+    color_comp=args.color.split('-')
+    cnum=color_comp[0]
+    cden=color_comp[1]
+    
 
 ##########################################################
 #   constants
@@ -591,8 +693,6 @@ if __name__ == "__main__":
         VHSCat={}
         VHSCatCols=[]
 
-    if ((args.useDB)or(args.checkVHS)):
-        dbh.close()
 
     if (args.checkVHS):
         if (VHSCat[VHSCatCols[0]].size < 2):
@@ -603,7 +703,9 @@ if __name__ == "__main__":
 #
 
     c2=SkyCoord(ra=GaiaCat['RA']*u.degree,dec=GaiaCat['DEC']*u.degree)
+    GaiaColFwd=['SOURCE_ID']
     if (checkVHS):
+        VHSColFwd=[]
         c3=SkyCoord(ra=VHSCat['RA']*u.degree,dec=VHSCat['DEC']*u.degree)
  
 #
@@ -634,10 +736,10 @@ if __name__ == "__main__":
 #
         c1=SkyCoord(ra=ExpCat[Cat]['ALPHAWIN_J2000']*u.degree,dec=ExpCat[Cat]['DELTAWIN_J2000']*u.degree)
 
-        kept_cat_GAIA[Cat],GMCat=MatchUndStellarSelect(c1,c2,ExpCat[Cat],'GAIA',DESColDict,DESColList[0],SNdict,verbose=verbose)
+        kept_cat_GAIA[Cat],GMCat=MatchUndStellarSelect(c1,c2,ExpCat[Cat],GaiaCat,'GAIA',DESColDict,GaiaColFwd,SNdict,verbose=verbose)
         MetaCat[Cat]['GAIA']=GMCat
         if (checkVHS):
-            kept_cat_VHS[Cat],VMCat=MatchUndStellarSelect(c1,c3,ExpCat[Cat],'VHS',DESColDict,DESColList[0],SNdict,verbose=verbose)
+            kept_cat_VHS[Cat],VMCat=MatchUndStellarSelect(c1,c3,ExpCat[Cat],VHSCat,'VHS',DESColDict,VHSColFwd,SNdict,verbose=verbose)
             MetaCat[Cat]['VHS']=VMCat
         else:
             MetaCat[Cat]['VHS']={'nm':0,'nm_cut':0,'nm_cut0':0,'nm_add':0,'avg_size':-1.,'med_size':-1.,'std_size':-1.,
@@ -660,7 +762,6 @@ if __name__ == "__main__":
 #
 #   Make the QA plots.
 #
-
     if (args.qa_select is not None):
         AccumSize={'All':0,'GAIA':0,'VHS':0}
         for Cat in grp_list:
@@ -741,6 +842,69 @@ if __name__ == "__main__":
         qa.plot_FP_quant('{:s}'.format(args.qa_dist),data)
 
 #
+#   Obtain DES color information 
+#   Form list of lists containing IDs (for upload in a search)
+#
+    IDList=[]
+    for Cat in kept_cat_GAIA:
+        for i in range(kept_cat_GAIA[Cat]['SOURCE_ID'].size):
+            IDList.append([int(kept_cat_GAIA[Cat]['SOURCE_ID'][i])])
+    Y6GoldCat,Y6GoldCols=get_Y6GoldPhot_GAIAObjects(IDList,dbh,dbSchema,Timing=True,verbose=2)
+#
+#   Form photometry columns for output catalogs 
+#
+
+    color_col='{:s}{:s}_COLOR'.format(cnum.upper(),cden.upper())
+    
+    for Cat in kept_cat_GAIA:
+#
+#       Add columns
+#
+        nobj=kept_cat_GAIA[Cat][DESColList[0]].size
+        kept_cat_GAIA[Cat][color_col]=np.zeros(nobj,dtype='f8')
+        kept_cat_GAIA[Cat]['FLAG_COLOR']=np.zeros(nobj,dtype='i4')
+        for col in Y6GoldCols:
+            if (re.match('FLAG',col) is not None):
+                kept_cat_GAIA[Cat][col.upper()]=np.zeros(nobj,dtype='i4')
+            else:
+                kept_cat_GAIA[Cat][col.upper()]=np.zeros(nobj,dtype='f8')
+#
+#       Populate columns
+#
+        for i in range(nobj):
+            s_id=kept_cat_GAIA[Cat]['SOURCE_ID'][i]
+            if (s_id in Y6GoldCat):
+                rec=Y6GoldCat[s_id]
+                for key in rec:
+                    kept_cat_GAIA[Cat][key.upper()][i]=rec[key]
+                sn_num=rec['psf_flux_aper_8_{:s}'.format(cnum)]/rec['psf_flux_err_aper_8_{:s}'.format(cnum)]
+                sn_den=rec['psf_flux_aper_8_{:s}'.format(cden)]/rec['psf_flux_err_aper_8_{:s}'.format(cden)]
+                cflag=rec['psf_flux_flags_{:s}'.format(cnum)]+rec['psf_flux_flags_{:s}'.format(cden)]
+                if ((sn_num>10.)and(sn_den>10.)and(cflag==0)):
+#                   calculate color (note numerator and denominator are flipped to remove need for "-2.5")
+                    kept_cat_GAIA[Cat][color_col][i]=2.5*np.log10(rec['psf_flux_aper_8_{:s}'.format(cden)]/rec['psf_flux_aper_8_{:s}'.format(cnum)]) 
+                else:
+                    kept_cat_GAIA[Cat][color_col][i]=args.sentinel_color
+                    kept_cat_GAIA[Cat]['FLAG_COLOR'][i]=1
+            else:
+#
+#               There was no known match in Y6_GOLD_2_0 (write default color and flag... leave photvalues as 0's)
+#
+                kept_cat_GAIA[Cat][color_col][i]=args.sentinel_color
+                kept_cat_GAIA[Cat]['FLAG_COLOR'][i]=4
+
+    CombCatCols=[]
+    for col in DESColList:
+        CombCatCols.append(col)
+    CombCatCols.append(color_col)
+    CombCatCols.append('FLAG_COLOR')
+    for col in Y6GoldCols:
+        CombCatCols.append(col.upper())
+    CombCatCols.append('SOURCE_ID')
+
+    print(DESColList)
+
+#
 #   Write out the GAIA selected entries 
 #
 
@@ -759,13 +923,15 @@ if __name__ == "__main__":
             ccd=MetaCat[Cat]['CCDNUM'],
             num=kept_cat_GAIA[Cat][DESColList[0]].size,
             fn=oname))
-        ofits.write(kept_cat_GAIA[Cat],names=DESColList,extname='OBJECTS')
+        ofits.write(kept_cat_GAIA[Cat],names=CombCatCols,extname='OBJECTS')
         ofits[0].write_key('OBJECTS',kept_cat_GAIA[Cat][DESColList[0]].size,comment=None)
         ofits[0].write_key('BAND',MetaCat[Cat]['BAND'],comment='Short name for filter')
         ofits[0].write_key('EXPNUM',MetaCat[Cat]['EXPNUM'],comment='DECam Exposure Number')
         ofits[0].write_key('CCDNUM',MetaCat[Cat]['CCDNUM'],comment='CCD Number')
         ofits.close()
 
+    if ((args.useDB)or(args.checkVHS)):
+        dbh.close()
 
     exit(0)
 

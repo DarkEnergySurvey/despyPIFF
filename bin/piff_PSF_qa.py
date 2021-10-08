@@ -205,13 +205,14 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 
         x0=star_data['x'][i]
         y0=star_data['y'][i]
+        c0=star_data['GI_COLOR'][i]
         b=galsim.BoundsI(int(x0)-stamp_size/2, int(x0)+stamp_size/2,
                          int(y0)-stamp_size/2, int(y0)+stamp_size/2)
         b= b & full_img.bounds
 
         img=full_img[b]
         wgt=full_wgt[b]
-        mod=psf.draw(x=x0,y=y0,chipnum=star_data['chipnum'][i],image=img.copy())
+        mod=psf.draw(x=x0,y=y0,chipnum=star_data['chipnum'][i],image=img.copy(),GI_COLOR=c0)
 #        print("FLUX by sum on model: ",np.sum(mod.array))
         mod*=star_data['flux'][i]
         mwgt=wgt.copy()
@@ -224,7 +225,7 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 #
     if (verbose > 2):
         print("---------------------------------------------------------------------")
-    piff_result['star_data']={'x':star_data['x'],'y':star_data['y'],'ra':15.0*star_data['ra'],'dec':star_data['dec'],'flux':star_data['flux'],'snr':star_data['snr'],
+    piff_result['star_data']={'x':star_data['x'],'y':star_data['y'],'ra':15.0*star_data['ra'],'dec':star_data['dec'],'flux':star_data['flux'],'snr':star_data['snr'],'is_reserve':star_data['is_reserve'],'gi_color':star_data['GI_COLOR'],
                                 's_e1':s_e1,'s_e2':s_e2,'s_T':s_T,'s_flag':s_flag,'m_e1':m_e1,'m_e2':m_e2,'m_T':m_T,'m_flag':m_flag}
 
     print("Rolling up NGMIX fit statistics")

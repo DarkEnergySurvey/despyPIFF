@@ -66,6 +66,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
 #   Now the STAR_QA table (one row per star per CCD)
 #   
     DBorder_STAR_QA=['FILENAME','STAR_NUMBER','EXPNUM','CCDNUM','X','Y','RA','DEC','FLUX','SNR',
+                     'IS_RESERVE','GI_COLOR',
                      'STAR_E1','STAR_E2','STAR_T','STAR_FLAG','MODEL_E1','MODEL_E2','MODEL_T','MODEL_FLAG',
                      'HPIX_64','HPIX_16384','HPIX_65536']
     new_data=[]
@@ -76,8 +77,8 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
 
         for i in range(data[Cat]['star_data']['x'].size):
             new_row=[filename,i+1,expnum,ccdnum]
-            for col in ['x','y','ra','dec','flux','snr','s_e1','s_e2','s_T','s_flag','m_e1','m_e2','m_T','m_flag','hpix_64','hpix_16384','hpix_65536']:
-                if (col in ['s_flag','m_flag','hpix_64','hpix_16384','hpix_65536']):
+            for col in ['x','y','ra','dec','flux','snr','is_reserve','gi_color','s_e1','s_e2','s_T','s_flag','m_e1','m_e2','m_T','m_flag','hpix_64','hpix_16384','hpix_65536']:
+                if (col in ['is_reserve','s_flag','m_flag','hpix_64','hpix_16384','hpix_65536']):
                     new_row.append(int(data[Cat]['star_data'][col][i]))
                 else:
                     new_row.append(data[Cat]['star_data'][col][i])
