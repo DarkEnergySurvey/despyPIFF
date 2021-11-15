@@ -25,10 +25,19 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
 #
 #
 #
+    pcol=None
     CatList=[]
     for Cat in data:
         if (Cat not in ['outland','exp_star_t_mean','exp_star_t_std']):
             CatList.append(Cat)
+            if ('pcol' in data[Cat]):
+                pcol=data[Cat]['pcol']
+    if (pcol is None):
+        print("Somehow, inexplicably we have reached ingestion but not assigned a color type to the catalog being uploaded to PIFF_STAR_QA")
+        print("Aborting!!!")
+        exit(1)
+    else:
+        print("Found and assigned color data for this observation as: {:s}".format(pcol))
 
 #
 #   First the MODEL_QA table (one row per CCD)
@@ -66,7 +75,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
 #   Now the STAR_QA table (one row per star per CCD)
 #   
     DBorder_STAR_QA=['FILENAME','STAR_NUMBER','EXPNUM','CCDNUM','X','Y','RA','DEC','FLUX','SNR',
-                     'IS_RESERVE','GI_COLOR',
+                     'IS_RESERVE',pcol,
                      'STAR_E1','STAR_E2','STAR_T','STAR_FLAG','MODEL_E1','MODEL_E2','MODEL_T','MODEL_FLAG',
                      'HPIX_64','HPIX_16384','HPIX_65536']
     new_data=[]
@@ -77,7 +86,7 @@ def ingest_piff_qa(data,QATab,StarTab,dbh,schema,verbose=0):
 
         for i in range(data[Cat]['star_data']['x'].size):
             new_row=[filename,i+1,expnum,ccdnum]
-            for col in ['x','y','ra','dec','flux','snr','is_reserve','gi_color','s_e1','s_e2','s_T','s_flag','m_e1','m_e2','m_T','m_flag','hpix_64','hpix_16384','hpix_65536']:
+            for col in ['x','y','ra','dec','flux','snr','is_reserve',pcol.lower(),'s_e1','s_e2','s_T','s_flag','m_e1','m_e2','m_T','m_flag','hpix_64','hpix_16384','hpix_65536']:
                 if (col in ['is_reserve','s_flag','m_flag','hpix_64','hpix_16384','hpix_65536']):
                     new_row.append(int(data[Cat]['star_data'][col][i]))
                 else:

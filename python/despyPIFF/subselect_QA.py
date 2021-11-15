@@ -175,7 +175,7 @@ def plot_selection2(fname,data,dataCut,dataCutVHS,verbose=0):
 
 
 ########################################
-def plot_selection3(fname,data,dataCut,dataCutVHS,verbose=0):
+def plot_selection3(fname,data,verbose=0):
 
 #
 #   version uses 2d-hist to get a proper plot but is no longer as facile with respect to scaling the grey levels
@@ -189,7 +189,10 @@ def plot_selection3(fname,data,dataCut,dataCutVHS,verbose=0):
     xspace=np.linspace(axrange[0],axrange[1],250)
     yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
     plt.hist2d(data['spread_model'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    plt.scatter(dataCut['spread_model'],dataCut['sn'],1,marker='.',color='red')
+    wsm=np.where(data['gaia_star']==1)
+    plt.scatter(data['spread_model'][wsm],data['sn'][wsm],1,marker='.',color='blue')
+    wsm=np.where(data['gaia_star']>1)
+    plt.scatter(data['spread_model'][wsm],data['sn'][wsm],1,marker='.',color='red')
     plt.yscale('log')
     plt.axis(axrange)
     plt.title('GAIA_DR2 Selection')
@@ -201,7 +204,10 @@ def plot_selection3(fname,data,dataCut,dataCutVHS,verbose=0):
     xspace=np.linspace(axrange[0],axrange[1],250)
     yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
     plt.hist2d(data['flux_radius'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    plt.scatter(dataCut['flux_radius'],dataCut['sn'],1,marker='.',color='red')
+    wsm=np.where(data['gaia_star']==1)
+    plt.scatter(data['flux_radius'][wsm],data['sn'][wsm],1,marker='.',color='blue')
+    wsm=np.where(data['gaia_star']>1)
+    plt.scatter(data['flux_radius'][wsm],data['sn'][wsm],1,marker='.',color='red')
     plt.yscale('log')
     plt.axis(axrange)
     plt.title('GAIA_DR2 Selection')
@@ -213,8 +219,9 @@ def plot_selection3(fname,data,dataCut,dataCutVHS,verbose=0):
     xspace=np.linspace(axrange[0],axrange[1],250)
     yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
     plt.hist2d(data['spread_model'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    if (dataCutVHS['sn'].size > 0):
-        plt.scatter(dataCutVHS['spread_model'],dataCutVHS['sn'],1,marker='.',color='red')
+    wsm=np.where(data['vhs_star']==1)
+    if (data['sn'][wsm].size > 0):
+        plt.scatter(data['spread_model'][wsm],data['sn'][wsm],1,marker='.',color='blue')
     else:
         xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
         ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
@@ -230,8 +237,9 @@ def plot_selection3(fname,data,dataCut,dataCutVHS,verbose=0):
     xspace=np.linspace(axrange[0],axrange[1],250)
     yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
     plt.hist2d(data['flux_radius'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    if (dataCutVHS['sn'].size > 0):
-        plt.scatter(dataCutVHS['flux_radius'],dataCutVHS['sn'],1,marker='.',color='red')
+    wsm=np.where(data['vhs_star']==1)
+    if (data['sn'][wsm].size > 0):
+        plt.scatter(data['flux_radius'][wsm],data['sn'][wsm],1,marker='.',color='blue')
     else:
         xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
         ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))

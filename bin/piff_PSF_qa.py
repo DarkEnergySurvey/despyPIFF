@@ -73,6 +73,11 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
     piff_result={}
     rfits=fitsio.FITS(fname,'r')
     h0=rfits[0].read_header()
+    if ('band' in h0):
+        piff_result['band']=h0['BAND']
+    else:
+        print('Warning! BAND not found in primary HDU.  Will check for color in psfstars.')
+        piff_result['band']=None
     if ('expnum' in h0):
         piff_result['expnum']=int(h0['EXPNUM'])
     else:
@@ -89,7 +94,6 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 #
     star_cols=rfits['psf_stars'].get_colnames()
     star_data=rfits['psf_stars'].read()
-
     piff_result['nstar']=len(star_data)
     if (verbose > 0):
         print("  nstar used: {:d}".format(piff_result['nstar']))
@@ -98,7 +102,9 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
         piff_failed=True
         piff_flag+=2
     rfits.close()
-
+#
+#   Backup search to arrive at a CCDNUM
+#
     if (piff_result['ccdnum'] == -1):
         chipnums=np.unique(star_data['chipnum'])
         if (chipnums.size > 1):
@@ -106,6 +112,25 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
         else:
             print("CCDNUM quandry successfully resolved using value of: {:d}".format(int(chipnums[0])))
         piff_result['ccdnum']=int(chipnums[0])
+#
+#   Backup search for no BAND to arrive at a color.
+#
+    if (piff_result['band'] is None):
+        if ('IZ_COLOR' in star_cols):
+            print("Found IZ_COLOR... using it")
+            pcol='IZ_COLOR'
+        elif ('GI_COLOR' in star_cols):
+            print("Found GI_COLOR... using it")
+            pcol='GI_COLOR'
+        else:
+            print("Warning!  No color present aborting")
+            exit(1)
+    else:
+        if (piff_result['band'] in ['z','Y']):
+            pcol='IZ_COLOR'
+        else:
+            pcol='GI_COLOR'
+    piff_result['pcol']=pcol
 
 #
 #   Test 2: Readable PSF (by PIFF)
@@ -143,7 +168,7 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 #
     xcen=np.array([1024.])
     ycen=np.array([2048.])
-    fwhm_cen,g2_cen=pqu.get_piff_size(psf,xcen,ycen,cnum=piff_result['ccdnum'],verbose=verbose)
+    fwhm_cen,g2_cen=pqu.get_piff_size(psf,xcen,ycen,cnum=piff_result['ccdnum'],color=pcol,verbose=verbose)
     piff_result['fwhm']=fwhm_cen[0,0]*pixel_scale
     print('Central model FWHM : {:.3f} '.format(piff_result['fwhm']))
 #
@@ -153,7 +178,7 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
     t0=time.time()
     xpos=np.arange(blocksize/2.0,2048,blocksize)
     ypos=np.arange(blocksize/2.0,4096,blocksize)
-    fwhm_im,g2_im=pqu.get_piff_size(psf,xpos,ypos,cnum=piff_result['ccdnum'],verbose=verbose)
+    fwhm_im,g2_im=pqu.get_piff_size(psf,xpos,ypos,cnum=piff_result['ccdnum'],color=pcol,verbose=verbose)
     piff_result['fwhm_map']={'bs':blocksize,'xpos':xpos,'ypos':ypos,'fwhm':fwhm_im*pixel_scale,
         'g2_amp':g2_im['amp'],'g2_x0':g2_im['x0'],'g2_y0':g2_im['y0'],'g2_sx':g2_im['sx'],'g2_sy':g2_im['sy'],'g2_the':g2_im['theta'],'g2_off':g2_im['off']}
     print("Elapsed time to sample PIFF model across CCD: {:.2f}".format(time.time()-t0))
@@ -194,6 +219,7 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
     if (seed is None):
         rng=None
     else:
+        print(piff_result['ccdnum'],piff_result['expnum'])
         rng=np.random.RandomState(seed*piff_result['ccdnum']+piff_result['expnum'])
 
     if (verbose > 2):
@@ -205,14 +231,18 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 
         x0=star_data['x'][i]
         y0=star_data['y'][i]
-        c0=star_data['GI_COLOR'][i]
+        c0=star_data[pcol][i]
         b=galsim.BoundsI(int(x0)-stamp_size/2, int(x0)+stamp_size/2,
                          int(y0)-stamp_size/2, int(y0)+stamp_size/2)
         b= b & full_img.bounds
 
         img=full_img[b]
         wgt=full_wgt[b]
-        mod=psf.draw(x=x0,y=y0,chipnum=star_data['chipnum'][i],image=img.copy(),GI_COLOR=c0)
+        if (pcol == 'GI_COLOR'):
+            mod=psf.draw(x=x0,y=y0,chipnum=star_data['chipnum'][i],image=img.copy(),GI_COLOR=c0)
+        elif (pcol == 'IZ_COLOR'):
+            mod=psf.draw(x=x0,y=y0,chipnum=star_data['chipnum'][i],image=img.copy(),IZ_COLOR=c0)
+
 #        print("FLUX by sum on model: ",np.sum(mod.array))
         mod*=star_data['flux'][i]
         mwgt=wgt.copy()
@@ -225,8 +255,12 @@ def check_PIFF_data(fname,img,seed=None,nsides=[64,16384,65536],blocksize=128,ve
 #
     if (verbose > 2):
         print("---------------------------------------------------------------------")
-    piff_result['star_data']={'x':star_data['x'],'y':star_data['y'],'ra':15.0*star_data['ra'],'dec':star_data['dec'],'flux':star_data['flux'],'snr':star_data['snr'],'is_reserve':star_data['is_reserve'],'gi_color':star_data['GI_COLOR'],
+    piff_result['star_data']={'x':star_data['x'],'y':star_data['y'],'ra':15.0*star_data['ra'],'dec':star_data['dec'],'flux':star_data['flux'],'snr':star_data['snr'],'is_reserve':star_data['is_reserve'],
                                 's_e1':s_e1,'s_e2':s_e2,'s_T':s_T,'s_flag':s_flag,'m_e1':m_e1,'m_e2':m_e2,'m_T':m_T,'m_flag':m_flag}
+    if (pcol == 'GI_COLOR'):
+        piff_result['star_data']['gi_color']=star_data[pcol]
+    if (pcol == 'IZ_COLOR'):
+        piff_result['star_data']['iz_color']=star_data[pcol]
 
     print("Rolling up NGMIX fit statistics")
     wsm=np.where(s_flag == 0)
