@@ -813,46 +813,38 @@ if __name__ == "__main__":
 #
 #       Find typical size of objects... clip and get approrpriate range of sizes (for stellar locus)
 #
-        avg_size,med_size,std_size=pqu.medclip(GaiaSource['size'],verbose=0)
-        min_size=avg_size-(3.0*std_size)
-        max_size=avg_size+(3.0*std_size)
-        wsm=np.where(np.logical_and(GaiaSource['size']>min_size,GaiaSource['size']<max_size))
-        max_sn=np.amax(GaiaSource['sn'][wsm])
-        max_flux_cut=np.amax(GaiaSource['flux'][wsm])
-        print("Peak flux currently: {:6.3e} ".format(max_flux_cut))
+        if (GaiaSource['size'].size > 2):
+            avg_size,med_size,std_size=pqu.medclip(GaiaSource['size'],verbose=0)
+            min_size=avg_size-(3.0*std_size)
+            max_size=avg_size+(3.0*std_size)
+            wsm=np.where(np.logical_and(GaiaSource['size']>min_size,GaiaSource['size']<max_size))
+            max_sn=np.amax(GaiaSource['sn'][wsm])
+            max_flux_cut=np.amax(GaiaSource['flux'][wsm])
+            print("Peak flux currently: {:6.3e} ".format(max_flux_cut))
 #
-        if (max_sn > SNdict['top_sn_thresh']):
-            max_flux_cut=10.0**((-2.5*np.log10(max_flux_cut)+SNdict['remove_top_sn'])/-2.5)
-            print("   Peak flux cut to: {:6.3e} ".format(max_flux_cut))
+            if (max_sn > SNdict['top_sn_thresh']):
+                max_flux_cut=10.0**((-2.5*np.log10(max_flux_cut)+SNdict['remove_top_sn'])/-2.5)
+                print("   Peak flux cut to: {:6.3e} ".format(max_flux_cut))
 #
-#       Flag GAIA matches that were outside range of normal sizes
+#           Flag GAIA matches that were outside range of normal sizes
 #
-        wsm=np.where(np.logical_and(ExpCat[Cat]['GAIA_STAR']==1,
-                     np.logical_or(ExpCat[Cat]['FLUX_RADIUS']>max_size,ExpCat[Cat]['FLUX_RADIUS']<min_size)))
-        ExpCat[Cat]['GAIA_STAR'][wsm]+=2
-#        print("size: {:.2f} {:.2f}  {:d}".format(min_size,max_size,ExpCat[Cat]['GAIA_STAR'][wsm].size))
+            wsm=np.where(np.logical_and(ExpCat[Cat]['GAIA_STAR']==1,
+                         np.logical_or(ExpCat[Cat]['FLUX_RADIUS']>max_size,ExpCat[Cat]['FLUX_RADIUS']<min_size)))
+            ExpCat[Cat]['GAIA_STAR'][wsm]+=2
+#            print("size: {:.2f} {:.2f}  {:d}".format(min_size,max_size,ExpCat[Cat]['GAIA_STAR'][wsm].size))
 #
-#       Remove all objects that exceed the limit established by GAIA
-#       (performed as keep all objects with lower S/N
+#           Remove all objects that exceed the limit established by GAIA
+#           (performed as keep all objects with lower S/N
 #
-        wsm=np.where(ExpCat[Cat]['FLUX_AUTO']<max_flux_cut)
-        for key in ExpCat[Cat]:
-           ExpCat[Cat][key]=ExpCat[Cat][key][wsm]
-        nobj_highSN=ExpCat[Cat][DESColList[0]].size
-        print("  High S/N cut further reduced catalog from {:d} to {:d} objects".format(nobj_flag,nobj_highSN))
-
-#       Below is leftover from debugging... remains for now (in case)
-
-#        for i in range(ExpCat[Cat]['MAG_AUTO'].size):
-#            if (ExpCat[Cat]['GAIA_STAR'][i] == 3):
-#                print("A {:5d} {:2d} {:2d} {:2d} {:6d} {:6d} {:6.1f} {:8.3f}  {:7.2f}  {:8.1f} {:8.1f} {:11.7f} {:11.7f} ".format(
-#                i,ExpCat[Cat]['GAIA_STAR'][i],ExpCat[Cat]['PHOT_OBJ'][i],ExpCat[Cat]['EXT_MASH'][i],
-#                ExpCat[Cat]['FLAGS'][i],ExpCat[Cat]['IMAFLAGS_ISO'][i],
-#                ExpCat[Cat]['FLUX_AUTO'][i]/ExpCat[Cat]['FLUXERR_AUTO'][i],ExpCat[Cat]['MAG_AUTO'][i],
-#                ExpCat[Cat]['FLUX_RADIUS'][i],ExpCat[Cat]['XWIN_IMAGE'][i],ExpCat[Cat]['YWIN_IMAGE'][i],
-#                ExpCat[Cat]['ALPHAWIN_J2000'][i],ExpCat[Cat]['DELTAWIN_J2000'][i]))
-  
-        AccumSize=AccumSize+nobj_highSN 
+            wsm=np.where(ExpCat[Cat]['FLUX_AUTO']<max_flux_cut)
+            for key in ExpCat[Cat]:
+               ExpCat[Cat][key]=ExpCat[Cat][key][wsm]
+            nobj_highSN=ExpCat[Cat][DESColList[0]].size
+            print("  High S/N cut further reduced catalog from {:d} to {:d} objects".format(nobj_flag,nobj_highSN))
+            AccumSize=AccumSize+nobj_highSN 
+        else:
+            print("Warning: Insufficient GAIA matches for statistics.  Proceeding with {:d} GAIA sources.".format(GaiaSource['size'].size))
+            AccumSize=AccumSize+nobj_flag
 
 #       FINISHED LOOPING OVER CATS
 
