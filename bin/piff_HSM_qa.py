@@ -426,7 +426,9 @@ if __name__ == "__main__":
         qa_result[icat]['model']['EXP_STAR_T_MEAN']=exp_star_t_mean
         qa_result[icat]['model']['EXP_STAR_T_STD']=exp_star_t_std
 
- 
+#
+#   Data typing from numpy to Oracle was fragile but seems to be more bullet proof if ndarray's are switched for lists
+#
     print("Swapping out np.ndarrays for ingestion ease")
     for icat in qa_result:
         for col in qa_result[icat]['stars']:
