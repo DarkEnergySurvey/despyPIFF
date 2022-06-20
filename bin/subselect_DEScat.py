@@ -9,10 +9,8 @@ import argparse
 import os
 import re
 import time
-#import datetime
 import sys
 import numpy as np
-#from numpy import ma
 import fitsio
 
 import pandas as pd
@@ -23,11 +21,6 @@ import despyPIFF.piff_qa_utils  as pqu
 from astropy.coordinates import SkyCoord, match_coordinates_sky
 from astropy import units as u
 
-#import matplotlib
-#matplotlib.use('Agg')
-#import matplotlib.pyplot as plt
-#from matplotlib.collections import PolyCollection
-#from matplotlib.patches import Polygon
 
 ###########################################
 def read_data(fname,ldac=False,hdu=1,verbose=0):
@@ -153,7 +146,7 @@ def form_ExpCat(grp_list,DESColDict,verbose=0):
 
 
 ######################################################################################
-def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
+def get_GAIA_objects(radec_box,dbh,dbSchema,release='EDR3',Timing=False,verbose=0):
 
     """ Query code to obtain list of images that overlap another
 
@@ -173,10 +166,11 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Form Query for case where RA ranges crosses RA=0h (not very good at poles)
 #
-        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
-            from des_admin.gaia_dr2 g
+        query="""select /*+ INDEX(g GAIA_{rname:s}_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
+            from des_admin.GAIA_{rname:s} g
             where (g.ra < {r2:.6f} or g.ra > {r1:.6f})
                 and g.dec between {d1:.6f} and {d2:.6f}""".format(
+        rname=release,
         r1=radec_box['ra1'],
         r2=radec_box['ra2'],
         d1=radec_box['dec1'],
@@ -185,10 +179,11 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Form query for normal workhorse case 
 #
-        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
-            from des_admin.gaia_dr2 g
+        query="""select /*+ INDEX(g GAIA_{rname:s}_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
+            from des_admin.GAIA_{rname:s} g
             where g.ra between {r1:.6f} and {r2:.6f}
                 and g.dec between {d1:.6f} and {d2:.6f}""".format(
+        rname=release,
         r1=radec_box['ra1'],
         r2=radec_box['ra2'],
         d1=radec_box['dec1'],
@@ -219,7 +214,7 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 
     CatDict={}
     if (cat_data.empty):
-        print("# No values returned from query of {tval:s} ".format(tval="GAIA_DR2"))
+        print("# No values returned from query of GAIA_{rname:s} ".format(rname=release))
         for val in header:
             CatDict[val]=np.array([])
     else:
@@ -229,92 +224,7 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
     curDB.close()
 
     if (verbose>0):
-        print("# Number of GAIA objects found is {nval:d} ".format(nval=CatDict[header[0]].size))
-    if (Timing):
-        t1=time.time()
-        print(" Query execution time: {:.2f}".format(t1-t0))
-
-    return CatDict,header
-
-
-######################################################################################
-def get_GAIAEDR3_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
-
-    """ Query code to obtain list of images that overlap another
-
-        Inputs:
-            radec_box: Dict with range to search in RA,Dec (with flag to handle case where RA range crosses RA=0h
-            dbh:       Database connection to be used
-            dbSchema:  Schema over which queries will occur.
-            verbose:   Integer setting level of verbosity when running.
-
-        Returns:
-            CatDict: Resulting Image dictionary
-    """
-
-    t0=time.time()
-
-    if (radec_box['crossra0']):
-#
-#       Form Query for case where RA ranges crosses RA=0h (not very good at poles)
-#
-        query="""select /*+ INDEX(g GAIA_EDR3_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
-            from des_admin.gaia_edr3 g
-            where (g.ra < {r2:.6f} or g.ra > {r1:.6f})
-                and g.dec between {d1:.6f} and {d2:.6f}""".format(
-        r1=radec_box['ra1'],
-        r2=radec_box['ra2'],
-        d1=radec_box['dec1'],
-        d2=radec_box['dec2'])
-    else:
-#
-#       Form query for normal workhorse case 
-#
-        query="""select /*+ INDEX(g GAIA_EDR3_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
-            from des_admin.gaia_edr3 g
-            where g.ra between {r1:.6f} and {r2:.6f}
-                and g.dec between {d1:.6f} and {d2:.6f}""".format(
-        r1=radec_box['ra1'],
-        r2=radec_box['ra2'],
-        d1=radec_box['dec1'],
-        d2=radec_box['dec2'])
-#
-    if (verbose > 0):
-        if (verbose == 1):
-            QueryLines=query.split('\n')
-            QueryOneLine='sql = '
-            for line in QueryLines:
-                QueryOneLine=QueryOneLine+" "+line.strip()
-            print("{:s}".format(QueryOneLine))
-        if (verbose > 1):
-            print("{:s}".format(query))
-#
-#   Establish a DB cursor
-#
-    curDB = dbh.cursor()
-#    curDB.execute(query)
-#    desc = [d[0].lower() for d in curDB.description]
-
-    prefetch=100000
-    curDB.arraysize=int(prefetch)
-    curDB.execute(query)
-#    header=[d[0].lower() for d in curDB.description]
-    header=[d[0].upper() for d in curDB.description]
-    cat_data=pd.DataFrame(curDB.fetchall())
-
-    CatDict={}
-    if (cat_data.empty):
-        print("# No values returned from query of {tval:s} ".format(tval="GAIA_EDR3"))
-        for val in header:
-            CatDict[val]=np.array([])
-    else:
-        cat_data.columns=header
-        for val in header:
-            CatDict[val]=np.array(cat_data[val])
-    curDB.close()
-
-    if (verbose>0):
-        print("# Number of GAIA objects found is {nval:d} ".format(nval=CatDict[header[0]].size))
+        print("# Number of GAIA_{rname:s} objects found is {nval:d} ".format(rname=release,nval=CatDict[header[0]].size))
     if (Timing):
         t1=time.time()
         print(" Query execution time: {:.2f}".format(t1-t0))
@@ -784,10 +694,10 @@ if __name__ == "__main__":
 #
         if (args.gaiadr2):
             print("GAIA_DR2 over-ride chosen.  Will use GAIA_DR2 for GAIA source selection.")
-            GaiaCat,GaiaCatCols=get_GAIADR2_objects(RaDecRange,dbh,dbSchema,Timing=True,verbose=2)
+            GaiaCat,GaiaCatCols=get_GAIA_objects(RaDecRange,dbh,dbSchema,release='DR2',Timing=True,verbose=2)
         else:
             print("Proceeding to query for sources in GAIA_EDR3.")
-            GaiaCat,GaiaCatCols=get_GAIAEDR3_objects(RaDecRange,dbh,dbSchema,Timing=True,verbose=2)
+            GaiaCat,GaiaCatCols=get_GAIA_objects(RaDecRange,dbh,dbSchema,release='EDR3',Timing=True,verbose=2)
     else:
 #
 #       Alternatively you can feed it a FITS table
@@ -1035,16 +945,7 @@ if __name__ == "__main__":
  
     for Cat in grp_list:
 #
-#       Make sure magnitude columns conform to sentinels being -99.9
-#
-#        for mag in ['G','R','I','Z','Y','K']:
-#            col='{:s}_MAG'.format(mag)
-#            if (col in ExpCat[Cat]):
-#                wsm= np.where(np.logical_or(ExpCat[Cat][col]<0.01,ExpCat[Cat][col]>35.0))
-#                ExpCat[Cat][col][wsm]=-99.9
-
-#
-#       Add columns (fill with sentinels and flag all
+#       Add columns (fill with sentinels and flag all)
 #
         nobj=ExpCat[Cat][DESColList[0]].size
         ExpCat[Cat]['FLAG_COLOR']=np.zeros(nobj,dtype='i4')
