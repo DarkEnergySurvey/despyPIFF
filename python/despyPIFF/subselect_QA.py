@@ -17,6 +17,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 from matplotlib.patches import Polygon
+from matplotlib.colors  import LogNorm
 
 ########################################
 def quick_hess(xdata,ydata,axrange=None,nxbin=250,nybin=100,logx=False,logy=False):
@@ -46,209 +47,94 @@ def quick_hess(xdata,ydata,axrange=None,nxbin=250,nybin=100,logx=False,logy=Fals
 
 
 ########################################
-def plot_selection(fname,data,dataCut,dataCutVHS,verbose=0):
-
-    plt.figure(figsize=(8,8),dpi=90)
-    plt.rc('font',size=9)
-    plt.subplot()
-
-    plt.subplot(2,2,1)
-    plt.scatter(data['spread_model'],data['sn'],1,marker='.',color='blue')
-    plt.scatter(dataCut['spread_model'],dataCut['sn'],1,marker='.',color='red')
-    plt.yscale('log')
-    plt.axis([-0.125,.125,1.0,3.e4])
-    plt.xlabel('SPREAD_MODEL')
-    plt.ylabel('S/N')
-    plt.title('GAIA DR2')
-
-    plt.subplot(2,2,2)
-    plt.scatter(data['flux_radius'],data['sn'],1,marker='.',color='blue')
-    plt.scatter(dataCut['flux_radius'],dataCut['sn'],1,marker='.',color='red')
-    plt.yscale('log')
-    plt.axis([-0.125,15.0,1.0,3.e4])
-    plt.xlabel('FLUX_RADIUS [pix]')
-    plt.ylabel('S/N')
-    plt.title('GAIA DR2')
-
-    plt.subplot(2,2,3)
-    plt.scatter(data['spread_model'],data['sn'],1,marker='.',color='blue')
-    plt.scatter(dataCutVHS['spread_model'],dataCutVHS['sn'],1,marker='.',color='red')
-    plt.yscale('log')
-    plt.axis([-0.125,.125,1.0,3.e4])
-    plt.xlabel('SPREAD_MODEL')
-    plt.ylabel('S/N')
-    plt.title('VHS')
-
-    plt.subplot(2,2,4)
-    plt.scatter(data['flux_radius'],data['sn'],1,marker='.',color='blue')
-    plt.scatter(dataCutVHS['flux_radius'],dataCutVHS['sn'],1,marker='.',color='red')
-    plt.yscale('log')
-    plt.axis([-0.125,15.0,1.0,3.e4])
-    plt.xlabel('FLUX_RADIUS [pix]')
-    plt.ylabel('S/N')
-    plt.title('VHS')
-
-    plt.savefig(fname)
-    plt.close()
-
-    return 0
-
-
-########################################
-def plot_selection2(fname,data,dataCut,dataCutVHS,verbose=0):
-
-#
-#   Attempts too create a scalable 2-d histogram (i.e. forms an image so it can be rescaled)
-#   Current version does not functio (properly) after matplotlib upgrades.. :(
-#
-
-    plt.figure(figsize=(8,8),dpi=90)
-    plt.rc('font',size=9)
-    plt.subplot()
-
-    plt.subplot(2,2,1)
-    axrange=[-0.05,0.05,1.0,3.e4]
-    H,xbins,ybins=quick_hess(data['spread_model'],data['sn'],axrange=axrange,logx=False,logy=True)
-    wsm=np.where(H<0.1)
-    H[wsm]=0.1
-    plt.imshow(np.log10(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
-    plt.scatter(dataCut['spread_model'],dataCut['sn'],1,marker='.',color='red')
-    plt.yscale('log')
-    plt.axis(axrange)
-    plt.title('GAIA_DR2 Selection')
-    plt.xlabel('Spread_Model')
-    plt.ylabel('S/N')
-
-    plt.subplot(2,2,2)
-    axrange=[0.0,12.0,1.0,3.e4]
-    H,xbins,ybins=quick_hess(data['flux_radius'],data['sn'],axrange=axrange,logx=False,logy=True)
-    plt.yscale('log')
-    wsm=np.where(H<0.1)
-    H[wsm]=0.1
-    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
-    plt.scatter(dataCut['flux_radius'],dataCut['sn'],1,marker='.',color='red')
-    plt.axis(axrange)
-    plt.title('GAIA_DR2 Selection')
-    plt.xlabel('Flux_Radius[pix]')
-    plt.ylabel('S/N')
-
-    plt.subplot(2,2,3)
-    axrange=[-0.05,0.05,1.0,3.e4]
-    H,xbins,ybins=quick_hess(data['spread_model'],data['sn'],axrange=axrange,logx=False,logy=True)
-    plt.yscale('log')
-    wsm=np.where(H<0.1)
-    H[wsm]=0.1
-    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
-    if (dataCutVHS['sn'].size > 0):
-        plt.scatter(dataCutVHS['spread_model'],dataCutVHS['sn'],1,marker='.',color='red')
-    else:
-        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
-        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
-        plt.text(xtxt,ytxt,'No VHS matches',color='red')
-    plt.axis(axrange)
-    plt.title('VHS Selection')
-    plt.xlabel('Spread_Model')
-    plt.ylabel('S/N')
-
-    plt.subplot(2,2,4)
-    axrange=[0.0,12.0,1.0,3.e4]
-    H,xbins,ybins=quick_hess(data['flux_radius'],data['sn'],axrange=axrange,logx=False,logy=True)
-    wsm=np.where(H<0.1)
-    H[wsm]=0.1
-    plt.yscale('log')
-    plt.imshow(np.sqrt(H).T,origin='lower',extent=[xbins[0],xbins[-1],ybins[0],ybins[-1]],cmap="Greys",aspect='auto')
-    if (dataCutVHS['sn'].size > 0):
-        plt.scatter(dataCutVHS['flux_radius'],dataCutVHS['sn'],1,marker='.',color='red')
-    else:
-        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
-        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
-        plt.text(xtxt,ytxt,'No VHS matches',color='red')
-    plt.axis(axrange)
-    plt.title('VHS Selection')
-    plt.xlabel('Flux_Radius[pix]')
-    plt.ylabel('S/N')
-
-    plt.savefig(fname)
-    plt.close()
-
-    return 0
-
-
-########################################
-def plot_selection3(fname,data,verbose=0):
+def plot_selection(fname,data,verbose=0):
 
 #
 #   version uses 2d-hist to get a proper plot but is no longer as facile with respect to scaling the grey levels
 #
-    plt.figure(figsize=(8,8),dpi=90)
+    plt.figure(figsize=(12,8),dpi=90)
     plt.rc('font',size=9)
     plt.subplot()
 
-    plt.subplot(2,2,1)
-    axrange=[-0.05,0.05,1.0,3.e4]
+    plt.subplot(2,3,1)
+    axrange=[-0.05,0.05,3.0,1.e4]
     xspace=np.linspace(axrange[0],axrange[1],250)
     yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
-    plt.hist2d(data['spread_model'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    wsm=np.where(data['gaia_star']==1)
-    plt.scatter(data['spread_model'][wsm],data['sn'][wsm],1,marker='.',color='blue')
-    wsm=np.where(data['gaia_star']>1)
-    plt.scatter(data['spread_model'][wsm],data['sn'][wsm],1,marker='.',color='red')
+    plt.hist2d(data['SPREAD_MODEL'],data['SN'],bins=(xspace,yspace),cmap="Greys")
+    wsm=np.where(data['GAIA_STAR']>0)
+    plt.scatter(data['SPREAD_MODEL'][wsm],data['SN'][wsm],1,marker='.',color='red')
+    wsm=np.where(data['GAIA_STAR']==1)
+    plt.scatter(data['SPREAD_MODEL'][wsm],data['SN'][wsm],1,marker='.',color='blue')
     plt.yscale('log')
     plt.axis(axrange)
-    plt.title('GAIA_DR2 Selection')
+    plt.title('GAIA Selection')
     plt.xlabel('Spread_Model')
     plt.ylabel('S/N')
 
-    plt.subplot(2,2,2)
-    axrange=[0.0,12.0,1.0,3.e4]
+    plt.subplot(2,3,2)
+    axrange=[0.0,10.0,3.0,1.e4]
     xspace=np.linspace(axrange[0],axrange[1],250)
     yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
-    plt.hist2d(data['flux_radius'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    wsm=np.where(data['gaia_star']==1)
-    plt.scatter(data['flux_radius'][wsm],data['sn'][wsm],1,marker='.',color='blue')
-    wsm=np.where(data['gaia_star']>1)
-    plt.scatter(data['flux_radius'][wsm],data['sn'][wsm],1,marker='.',color='red')
+    plt.hist2d(data['FLUX_RADIUS'],data['SN'],bins=(xspace,yspace),cmap="Greys")
+    wsm=np.where(data['GAIA_STAR']>0)
+    plt.scatter(data['FLUX_RADIUS'][wsm],data['SN'][wsm],1,marker='.',color='red')
+    wsm=np.where(data['GAIA_STAR']==1)
+    plt.scatter(data['FLUX_RADIUS'][wsm],data['SN'][wsm],1,marker='.',color='blue')
     plt.yscale('log')
     plt.axis(axrange)
-    plt.title('GAIA_DR2 Selection')
+    plt.title('GAIA Selection')
     plt.xlabel('Flux_Radius[pix]')
     plt.ylabel('S/N')
 
-    plt.subplot(2,2,3)
-    axrange=[-0.05,0.05,1.0,3.e4]
+    plt.subplot(2,3,3)
+    axrange=[0.0,10.0,3.0,1.e4]
     xspace=np.linspace(axrange[0],axrange[1],250)
     yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
-    plt.hist2d(data['spread_model'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    wsm=np.where(data['vhs_star']==1)
-    if (data['sn'][wsm].size > 0):
-        plt.scatter(data['spread_model'][wsm],data['sn'][wsm],1,marker='.',color='blue')
-    else:
-        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
-        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
-        plt.text(xtxt,ytxt,'No VHS matches',color='red')
+    plt.hist2d(data['FLUX_RADIUS'],data['SN'],bins=(xspace,yspace),cmap="Greys")
+    wsm=np.where(data['EXT_MASH']==0)
+    plt.scatter(data['FLUX_RADIUS'][wsm],data['SN'][wsm],1,marker='.',color='blue')
     plt.yscale('log')
     plt.axis(axrange)
-    plt.title('VHS Selection')
-    plt.xlabel('Spread_Model')
-    plt.ylabel('S/N')
-
-    plt.subplot(2,2,4)
-    axrange=[0.0,12.0,1.0,3.e4]
-    xspace=np.linspace(axrange[0],axrange[1],250)
-    yspace=np.logspace(np.log10(axrange[2]),np.log10(axrange[3]),100)
-    plt.hist2d(data['flux_radius'],data['sn'],bins=(xspace,yspace),cmap="Greys")
-    wsm=np.where(data['vhs_star']==1)
-    if (data['sn'][wsm].size > 0):
-        plt.scatter(data['flux_radius'][wsm],data['sn'][wsm],1,marker='.',color='blue')
-    else:
-        xtxt=axrange[0]+(0.025*(axrange[1]-axrange[0]))
-        ytxt=10.0**(np.log10(axrange[3])-(0.100*(np.log10(axrange[3])-np.log10(axrange[2]))))
-        plt.text(xtxt,ytxt,'No VHS matches',color='red')
-    plt.yscale('log')
-    plt.axis(axrange)
-    plt.title('VHS Selection')
+    plt.title('EXT_MASH=0')
     plt.xlabel('Flux_Radius[pix]')
     plt.ylabel('S/N')
+
+    plt.subplot(2,3,5)
+    axrange=[-0.5,3.5,-1.5,3.0]
+    xspace=np.linspace(axrange[0],axrange[1],250)
+    yspace=np.linspace(axrange[2],axrange[3],250)
+    wsm=np.where(np.logical_and(np.logical_and(data['R_MAG']>-99.,data['Z_MAG']>-99.),data['K_MAG']>-99.))
+    rz_color=data['R_MAG'][wsm]-data['Z_MAG'][wsm]
+    zk_color=data['Z_MAG'][wsm]-data['K_MAG'][wsm]
+    plt.hist2d(rz_color,zk_color,bins=(xspace,yspace),cmap="Greys",norm=LogNorm(vmin=0.5,vmax=10.0))
+
+    wsm=np.where(np.logical_and(np.logical_and(data['R_MAG']>-99.,data['Z_MAG']>-99.),np.logical_and(data['K_MAG']>-99.,data['GAIA_STAR']==1)))
+    rz_color=data['R_MAG'][wsm]-data['Z_MAG'][wsm]
+    zk_color=data['Z_MAG'][wsm]-data['K_MAG'][wsm]
+    plt.scatter(rz_color,zk_color,1,marker='.',color='blue')
+##    plt.yscale('log')
+    plt.axis(axrange)
+    plt.title('GAIA_STAR=1 w/ VHS')
+    plt.xlabel('r-z (mag)')
+    plt.ylabel('z-K (mag)')
+
+    plt.subplot(2,3,6)
+    axrange=[-0.5,3.5,-1.5,3.0]
+    xspace=np.linspace(axrange[0],axrange[1],250)
+    yspace=np.linspace(axrange[2],axrange[3],250)
+    wsm=np.where(np.logical_and(np.logical_and(data['R_MAG']>-99.,data['Z_MAG']>-99.),data['K_MAG']>-99.))
+    rz_color=data['R_MAG'][wsm]-data['Z_MAG'][wsm]
+    zk_color=data['Z_MAG'][wsm]-data['K_MAG'][wsm]
+    plt.hist2d(rz_color,zk_color,bins=(xspace,yspace),cmap="Greys",norm=LogNorm(vmin=0.5,vmax=10.0))
+
+    wsm=np.where(np.logical_and(np.logical_and(data['R_MAG']>-99.,data['Z_MAG']>-99.),np.logical_and(data['K_MAG']>-99.,data['EXT_MASH']==0)))
+    rz_color=data['R_MAG'][wsm]-data['Z_MAG'][wsm]
+    zk_color=data['Z_MAG'][wsm]-data['K_MAG'][wsm]
+    plt.scatter(rz_color,zk_color,1,marker='.',color='blue')
+    plt.axis(axrange)
+    plt.title('EXT_MASH=0 w/ VHS')
+    plt.xlabel('r-z (mag)')
+    plt.ylabel('z-K (mag)')
 
     plt.savefig(fname)
     plt.close()

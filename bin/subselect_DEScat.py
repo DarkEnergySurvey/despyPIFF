@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Subselection of a DES (FINALCUT) catalog for use with PIFF
-Subselection uses GAIA DR2 (and potentially VHS) 
+Subselection uses GAIA DR3 (and potentially VHS) 
 """
 
 #from __future__ import print_function
@@ -20,7 +20,7 @@ import despydb.desdbi
 from despyPIFF import subselect_QA as qa
 import despyPIFF.piff_qa_utils  as pqu
 
-from astropy.coordinates import SkyCoord
+from astropy.coordinates import SkyCoord, match_coordinates_sky
 from astropy import units as u
 
 #import matplotlib
@@ -173,7 +173,7 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Form Query for case where RA ranges crosses RA=0h (not very good at poles)
 #
-        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id,g.ra,g.dec
+        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
             from des_admin.gaia_dr2 g
             where (g.ra < {r2:.6f} or g.ra > {r1:.6f})
                 and g.dec between {d1:.6f} and {d2:.6f}""".format(
@@ -185,7 +185,7 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Form query for normal workhorse case 
 #
-        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id,g.ra,g.dec
+        query="""select /*+ INDEX(g GAIA_DR2_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
             from des_admin.gaia_dr2 g
             where g.ra between {r1:.6f} and {r2:.6f}
                 and g.dec between {d1:.6f} and {d2:.6f}""".format(
@@ -238,6 +238,91 @@ def get_GAIADR2_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 
 
 ######################################################################################
+def get_GAIAEDR3_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
+
+    """ Query code to obtain list of images that overlap another
+
+        Inputs:
+            radec_box: Dict with range to search in RA,Dec (with flag to handle case where RA range crosses RA=0h
+            dbh:       Database connection to be used
+            dbSchema:  Schema over which queries will occur.
+            verbose:   Integer setting level of verbosity when running.
+
+        Returns:
+            CatDict: Resulting Image dictionary
+    """
+
+    t0=time.time()
+
+    if (radec_box['crossra0']):
+#
+#       Form Query for case where RA ranges crosses RA=0h (not very good at poles)
+#
+        query="""select /*+ INDEX(g GAIA_EDR3_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
+            from des_admin.gaia_edr3 g
+            where (g.ra < {r2:.6f} or g.ra > {r1:.6f})
+                and g.dec between {d1:.6f} and {d2:.6f}""".format(
+        r1=radec_box['ra1'],
+        r2=radec_box['ra2'],
+        d1=radec_box['dec1'],
+        d2=radec_box['dec2'])
+    else:
+#
+#       Form query for normal workhorse case 
+#
+        query="""select /*+ INDEX(g GAIA_EDR3_RADEC_BTX) */ g.source_id as gaia_source_id,g.ra,g.dec
+            from des_admin.gaia_edr3 g
+            where g.ra between {r1:.6f} and {r2:.6f}
+                and g.dec between {d1:.6f} and {d2:.6f}""".format(
+        r1=radec_box['ra1'],
+        r2=radec_box['ra2'],
+        d1=radec_box['dec1'],
+        d2=radec_box['dec2'])
+#
+    if (verbose > 0):
+        if (verbose == 1):
+            QueryLines=query.split('\n')
+            QueryOneLine='sql = '
+            for line in QueryLines:
+                QueryOneLine=QueryOneLine+" "+line.strip()
+            print("{:s}".format(QueryOneLine))
+        if (verbose > 1):
+            print("{:s}".format(query))
+#
+#   Establish a DB cursor
+#
+    curDB = dbh.cursor()
+#    curDB.execute(query)
+#    desc = [d[0].lower() for d in curDB.description]
+
+    prefetch=100000
+    curDB.arraysize=int(prefetch)
+    curDB.execute(query)
+#    header=[d[0].lower() for d in curDB.description]
+    header=[d[0].upper() for d in curDB.description]
+    cat_data=pd.DataFrame(curDB.fetchall())
+
+    CatDict={}
+    if (cat_data.empty):
+        print("# No values returned from query of {tval:s} ".format(tval="GAIA_EDR3"))
+        for val in header:
+            CatDict[val]=np.array([])
+    else:
+        cat_data.columns=header
+        for val in header:
+            CatDict[val]=np.array(cat_data[val])
+    curDB.close()
+
+    if (verbose>0):
+        print("# Number of GAIA objects found is {nval:d} ".format(nval=CatDict[header[0]].size))
+    if (Timing):
+        t1=time.time()
+        print(" Query execution time: {:.2f}".format(t1-t0))
+
+    return CatDict,header
+
+
+######################################################################################
 def get_VHS_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 
     """ Query code to obtain list of likely stars from VHS
@@ -258,11 +343,10 @@ def get_VHS_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Cross RA=0 (not very good at poles)
 #
-        query="""select v.ra,v.dec,v.vhs_class 
-            from bechtol.y3a2_vhs_des_class v
-            where (v.ra < {r2:.6f} or v.ra > {r1:.6f})
-                and v.dec between {d1:.6f} and {d2:.6f}
-                and v.vhs_class=0""".format(
+        query="""select v.sourceid as vhs_sourceid,v.ra2000,v.dec2000,v.ksapermag3_ab as k_mag,v.ksapermag3err_ab as k_magerr,v.kserrbits as k_flags
+            from des_admin.vhs_viking_ks v
+            where (v.ra2000 < {r2:.6f} or v.ra2000 > {r1:.6f})
+                and v.dec2000 between {d1:.6f} and {d2:.6f}""".format(
         r1=radec_box['ra1'],
         r2=radec_box['ra2'],
         d1=radec_box['dec1'],
@@ -271,11 +355,10 @@ def get_VHS_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 #
 #       Normal workhorse case 
 #
-        query="""select v.ra,v.dec,v.vhs_class 
-            from bechtol.y3a2_vhs_des_class v
-            where v.ra between {r1:.6f} and {r2:.6f}
-                and v.dec between {d1:.6f} and {d2:.6f} 
-                and v.vhs_class=0""".format(
+        query="""select v.sourceid as vhs_sourceid,v.ra2000,v.dec2000,v.ksapermag3_ab as k_mag,v.ksapermag3err_ab as k_magerr,v.kserrbits as k_flags
+            from des_admin.vhs_viking_ks v
+            where v.ra2000 between {r1:.6f} and {r2:.6f}
+                and v.dec2000 between {d1:.6f} and {d2:.6f}""".format(
         r1=radec_box['ra1'],
         r2=radec_box['ra2'],
         d1=radec_box['dec1'],
@@ -331,7 +414,7 @@ def get_VHS_objects(radec_box,dbh,dbSchema,Timing=False,verbose=0):
 ######################################################################################
 def get_Y6Gold_objects(radec_box,dbh,dbSchema,GoldTab='Y6_GOLD_2_0',Timing=False,verbose=0):
 
-    """ Query code to obtain list of images that overlap another
+    """ Query code to obtain measurements from DES Gold catalog based on a ra-dec box constraint
 
         Inputs:
             radec_box: Dict with range to search in RA,Dec (with flag to handle case where RA range crosses RA=0h
@@ -351,14 +434,14 @@ def get_Y6Gold_objects(radec_box,dbh,dbSchema,GoldTab='Y6_GOLD_2_0',Timing=False
 #
 #       Form Query for case where RA ranges crosses RA=0h (not very good at poles)
 #
-#        query="""select y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
-        query="""select /*+ INDEX(y Y6_GOLD_2_0_RADEC_BTX) */ y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
-            y.PSF_FLUX_APER_8_G,y.PSF_FLUX_ERR_APER_8_G,y.PSF_FLUX_FLAGS_G,
-            y.PSF_FLUX_APER_8_R,y.PSF_FLUX_ERR_APER_8_R,y.PSF_FLUX_FLAGS_R,
-            y.PSF_FLUX_APER_8_I,y.PSF_FLUX_ERR_APER_8_I,y.PSF_FLUX_FLAGS_I,
-            y.PSF_FLUX_APER_8_Z,y.PSF_FLUX_ERR_APER_8_Z,y.PSF_FLUX_FLAGS_Z,
-            y.PSF_FLUX_APER_8_Y,y.PSF_FLUX_ERR_APER_8_Y,y.PSF_FLUX_FLAGS_Y,
-            y.EXT_MASH 
+#        query="""select /*+ INDEX(y Y6_GOLD_2_0_RADEC_BTX) */ y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
+        query="""select y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
+            y.PSF_MAG_APER_8_G as G_MAG, y.PSF_MAG_ERR_G as G_MAGERR, y.PSF_FLUX_FLAGS_G as G_FLAGS,
+            y.PSF_MAG_APER_8_R as R_MAG, y.PSF_MAG_ERR_R as R_MAGERR, y.PSF_FLUX_FLAGS_R as R_FLAGS,
+            y.PSF_MAG_APER_8_I as I_MAG, y.PSF_MAG_ERR_I as I_MAGERR, y.PSF_FLUX_FLAGS_I as I_FLAGS,
+            y.PSF_MAG_APER_8_Z as Z_MAG, y.PSF_MAG_ERR_Z as Z_MAGERR, y.PSF_FLUX_FLAGS_Z as Z_FLAGS,
+            y.PSF_MAG_APER_8_Y as Y_MAG, y.PSF_MAG_ERR_Y as Y_MAGERR, y.PSF_FLUX_FLAGS_Y as Y_FLAGS,
+            y.EXT_MASH,y.BDF_T
         from {schema:s}{gtab:s} y
         where (y.ra < {r2:.6f} or y.ra > {r1:.6f})
             and y.dec between {d1:.6f} and {d2:.6f}""".format(
@@ -373,14 +456,14 @@ def get_Y6Gold_objects(radec_box,dbh,dbSchema,GoldTab='Y6_GOLD_2_0',Timing=False
 #
 #       Form query for normal workhorse case 
 #
-#        query="""select y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
-        query="""select /*+ INDEX(y Y6_GOLD_2_0_RADEC_BTX) */ y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
-            y.PSF_FLUX_APER_8_G,y.PSF_FLUX_ERR_APER_8_G,y.PSF_FLUX_FLAGS_G,
-            y.PSF_FLUX_APER_8_R,y.PSF_FLUX_ERR_APER_8_R,y.PSF_FLUX_FLAGS_R,
-            y.PSF_FLUX_APER_8_I,y.PSF_FLUX_ERR_APER_8_I,y.PSF_FLUX_FLAGS_I,
-            y.PSF_FLUX_APER_8_Z,y.PSF_FLUX_ERR_APER_8_Z,y.PSF_FLUX_FLAGS_Z,
-            y.PSF_FLUX_APER_8_Y,y.PSF_FLUX_ERR_APER_8_Y,y.PSF_FLUX_FLAGS_Y,
-            y.EXT_MASH 
+#        query="""select /*+ INDEX(y Y6_GOLD_2_0_RADEC_BTX) */ y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
+        query="""select y.COADD_OBJECT_ID,y.ALPHAWIN_J2000,y.DELTAWIN_J2000,
+            y.PSF_MAG_APER_8_G as G_MAG, y.PSF_MAG_ERR_G as G_MAGERR, y.PSF_FLUX_FLAGS_G as G_FLAGS,
+            y.PSF_MAG_APER_8_R as R_MAG, y.PSF_MAG_ERR_R as R_MAGERR, y.PSF_FLUX_FLAGS_R as R_FLAGS,
+            y.PSF_MAG_APER_8_I as I_MAG, y.PSF_MAG_ERR_I as I_MAGERR, y.PSF_FLUX_FLAGS_I as I_FLAGS,
+            y.PSF_MAG_APER_8_Z as Z_MAG, y.PSF_MAG_ERR_Z as Z_MAGERR, y.PSF_FLUX_FLAGS_Z as Z_FLAGS,
+            y.PSF_MAG_APER_8_Y as Y_MAG, y.PSF_MAG_ERR_Y as Y_MAGERR, y.PSF_FLUX_FLAGS_Y as Y_FLAGS,
+            y.EXT_MASH,y.BDF_T
         from {schema:s}{gtab:s} y
         where (y.ra between {r1:.6f} and {r2:.6f})
             and y.dec between {d1:.6f} and {d2:.6f}""".format(
@@ -586,9 +669,12 @@ if __name__ == "__main__":
     parser.add_argument('--top_sn_thresh',action='store', type=float, default=1.e3, help='Signal-to-noise threshold to be exceeded before bright objects are removed (default=1.e3)')
     parser.add_argument('--min_sn_add',   action='store', type=float, default=20., help='Signal-to-noise threshold to be exceeded before appropriately sized objects are added (default=20.)')
     parser.add_argument('--color',        action='store', type=str, default='g-i', help='Color to write to output file (default=g-i; written as GI_COLOR)')
-    parser.add_argument('--sentinel_color',  action='store', type=float, default=1.6, help='Sentinel value to write for color (default=1.6)')
+    parser.add_argument('--sentinel_color',  action='store', type=float, default=1.3, help='Sentinel value to write for color (default=1.6)')
     parser.add_argument('--qa_select',    action='store', type=str, default=None, help='File name for selection QA plots')
     parser.add_argument('--qa_dist',      action='store', type=str, default=None, help='File name for distribution QA plots')
+
+    parser.add_argument('--gaiadr2',      action='store_true', default=False, help='Flag to use GAIA_DR2 (default will query GAIA EDR3)')
+    parser.add_argument('--gsm_rad',      action='store', type=float, default=2.0, help='GAIA self-match radius in arcseconds (default=2.0).  Set to negative to turn off.')
 
     parser.add_argument('-T','--Timing',  action='store_true', default=False, help='If set timing information accompanies output')
 #    parser.add_argument('--debug'       , action='store_true', default=False, help='Debug mode resticts code to work on a handful of objects')
@@ -696,7 +782,12 @@ if __name__ == "__main__":
 #
 #       Setup for database interactions (through despydb)
 #
-        GaiaCat,GaiaCatCols=get_GAIADR2_objects(RaDecRange,dbh,dbSchema,Timing=True,verbose=2)
+        if (args.gaiadr2):
+            print("GAIA_DR2 over-ride chosen.  Will use GAIA_DR2 for GAIA source selection.")
+            GaiaCat,GaiaCatCols=get_GAIADR2_objects(RaDecRange,dbh,dbSchema,Timing=True,verbose=2)
+        else:
+            print("Proceeding to query for sources in GAIA_EDR3.")
+            GaiaCat,GaiaCatCols=get_GAIAEDR3_objects(RaDecRange,dbh,dbSchema,Timing=True,verbose=2)
     else:
 #
 #       Alternatively you can feed it a FITS table
@@ -732,22 +823,36 @@ if __name__ == "__main__":
             checkVHS=False
 
 #
-#   Pre-Prepare GAIA data (and VHS data) for matching
+#   Pre-Prepare GAIA data for matching
+#   Included performing a self-match among GAIA sources (so they can later be flagged)
 #
-
     c2=SkyCoord(ra=GaiaCat['RA']*u.degree,dec=GaiaCat['DEC']*u.degree)
-    GaiaColFwd=['SOURCE_ID']
-    if (checkVHS):
-        VHSColFwd=[]
-        c3=SkyCoord(ra=VHSCat['RA']*u.degree,dec=VHSCat['DEC']*u.degree)
+    GaiaCat['GaiaSelfMatch']=np.zeros(GaiaCat['RA'].size,dtype='i4')-1
+    if (args.gsm_rad >= 0):
+        gsm_idx,gsm_sep,gsm_dist=match_coordinates_sky(c2,c2,nthneighbor=2)
+        idx1=np.arange(GaiaCat['RA'].size)
+        wsm=np.where(gsm_sep.arcsecond<args.gsm_rad)
+        GaiaCat['GaiaSelfMatch'][idx1[wsm]]=gsm_idx[wsm]
+    GaiaColFwd=['GAIA_SOURCE_ID','GaiaSelfMatch']
+
+#    Enable to get a sense that self-match was working
+#    for i in range(GaiaCat['RA'].size):
+#        if (GaiaCat['GaiaSelfMatch'][i]>=0):
+#            print(i,GaiaCat['GaiaSelfMatch'][i])
+
 #
+#   Pre-Prepare VHS data for matching
+#
+    if (checkVHS):
+        VHSColFwd=['VHS_SOURCEID','K_MAG','K_MAGERR','K_FLAGS']
+        c3=SkyCoord(ra=VHSCat['RA2000']*u.degree,dec=VHSCat['DEC2000']*u.degree)
 #
     PhotCat,PhotCatCols=get_Y6Gold_objects(RaDecRange,dbh,dbSchema,Timing=True,verbose=verbose)
     c4=SkyCoord(ra=PhotCat['ALPHAWIN_J2000']*u.degree,dec=PhotCat['DELTAWIN_J2000']*u.degree)
   
     PhotCatKeep=[]
     for col in PhotCatCols:
-        if (col not in ['ALPHAWIN_J2000','DELTAWIN_J2000','COADD_OBJECT_ID']):
+        if (col not in ['ALPHAWIN_J2000','DELTAWIN_J2000']):
             PhotCatKeep.append(col)
  
 #
@@ -760,37 +865,52 @@ if __name__ == "__main__":
     for Cat in grp_list:
         if (Cat not in MetaCat):
             MetaCat[Cat]={}
+        print("##################################################")
         print("Working on catalog: {:s}".format(Cat))
         nobj0=ExpCat[Cat][DESColList[0]].size
 #
-#       Perform matching against GAIA (and VHS) and then attempt to isolate further the appropriate portion of stellar locus
+#       Perform matching against GAIA, a photometry catalog, and VHS.
+#           - After GAIA match, add to GAIA_STAR flag for cases where a selfmatch was found (then drop the key)
+#           - then attempt to isolate further the appropriate portion of stellar locus
 #
         c1=SkyCoord(ra=ExpCat[Cat]['ALPHAWIN_J2000']*u.degree,dec=ExpCat[Cat]['DELTAWIN_J2000']*u.degree)
-#
-#       Check for what columns exist
-#        for key in ExpCat[Cat]:
-#            print(key,ExpCat[Cat][key].dtype)
 
-        ExpCat[Cat]=SimplifiedMatch(c1,c2,ExpCat[Cat],GaiaCat,[],FlagCol='GAIA_STAR',verbose=verbose)
+        ExpCat[Cat]=SimplifiedMatch(c1,c2,ExpCat[Cat],GaiaCat,GaiaColFwd,FlagCol='GAIA_STAR',verbose=verbose)
         if (verbose > 0):
             wsm=np.where(ExpCat[Cat]['GAIA_STAR']>0)
             print("Performed match to GAIA. Matched {:d} objects.".format(ExpCat[Cat]['GAIA_STAR'][wsm].size))
+        wsm=np.where(np.logical_and(ExpCat[Cat]['GAIA_STAR']>0,ExpCat[Cat]['GaiaSelfMatch']>-1))
+        ExpCat[Cat]['GAIA_STAR'][wsm]+=4
+        del ExpCat[Cat]['GaiaSelfMatch']
+        if (verbose > 0):
+            wsm=np.where(ExpCat[Cat]['GAIA_STAR']==1)
+            print("Removed GAIA self-match. Matched {:d} objects.".format(ExpCat[Cat]['GAIA_STAR'][wsm].size))
 
         ExpCat[Cat]=SimplifiedMatch(c1,c4,ExpCat[Cat],PhotCat,PhotCatKeep,FlagCol='PHOT_OBJ',verbose=verbose)
         if (verbose > 0):
             wsm=np.where(ExpCat[Cat]['PHOT_OBJ']>0)
             print("Performed match to photoemtric catalog.  Matched {:d} objects.".format(ExpCat[Cat]['PHOT_OBJ'][wsm].size))
             if ('EXT_MASH' in ExpCat[Cat]):
-                wsm=np.where(ExpCat[Cat]['PHOT_OBJ']>0)
+                wsm=np.where(np.logical_and(ExpCat[Cat]['PHOT_OBJ']>0,ExpCat[Cat]['EXT_MASH']==0))
+                print("Performed match to photoemtric catalog.  Matched {:d} objects with EXT_MASH=0.".format(ExpCat[Cat]['PHOT_OBJ'][wsm].size))
 
         if (checkVHS):
-            ExpCat[Cat]=SimplifiedMatch(c1,c3,ExpCat[Cat],VHSCAT,[],FlagCol='VHS_STAR',verbose=verbose)
+            ExpCat[Cat]=SimplifiedMatch(c1,c3,ExpCat[Cat],VHSCat,VHSColFwd,FlagCol='VHS_OBJ',verbose=verbose)
             if (verbose > 0):
-                wsm=np.where(ExpCat[Cat]['VHS_STAR']>0)
-                print("Performed match to VHS.  Matched {:d} objects.".format(ExpCat[Cat]['VHS_STAR'][wsm].size))
+                wsm=np.where(ExpCat[Cat]['VHS_OBJ']>0)
+                print("Performed match to VHS.  Matched {:d} objects.".format(ExpCat[Cat]['VHS_OBJ'][wsm].size))
+        else:
+            if (verbose > 0):
+                print("No VHS data available (or not requested).  Creating columns with sentinels.")
+            nobj0=ExpCat[Cat][DESColList[0]].size
+            ExpCat[Cat]['VHS_SOURCEID']=np.full(nobj0,0,dtype=np.int64)
+            ExpCat[Cat]['VHS_OBJ']=np.full(nobj0,0,dtype=np.int32)
+            ExpCat[Cat]['K_MAG']=np.full(nobj0,-99.9,dtype=np.float64)
+            ExpCat[Cat]['K_MAGERR']=np.full(nobj0,-99.9,dtype=np.float64)
+            ExpCat[Cat]['K_FLAGS']=np.full(nobj0,0,dtype=np.int16)
 
 #
-#       Remove objects with SExtractor or Image Flags havee been thrown
+#       Remove objects with SExtractor or Image Flags have been thrown
 #
         wsm=np.where(np.logical_and(ExpCat[Cat]['FLAGS']==0,ExpCat[Cat]['IMAFLAGS_ISO']==0))
         nobj0=ExpCat[Cat][DESColList[0]].size
@@ -817,6 +937,8 @@ if __name__ == "__main__":
             avg_size,med_size,std_size=pqu.medclip(GaiaSource['size'],verbose=0)
             min_size=avg_size-(3.0*std_size)
             max_size=avg_size+(3.0*std_size)
+            max_size=avg_size+(3.0*std_size)
+            wsm=np.where(np.logical_and(GaiaSource['size']>min_size,GaiaSource['size']<max_size))
             wsm=np.where(np.logical_and(GaiaSource['size']>min_size,GaiaSource['size']<max_size))
             max_sn=np.amax(GaiaSource['sn'][wsm])
             max_flux_cut=np.amax(GaiaSource['flux'][wsm])
@@ -846,6 +968,15 @@ if __name__ == "__main__":
             print("Warning: Insufficient GAIA matches for statistics.  Proceeding with {:d} GAIA sources.".format(GaiaSource['size'].size))
             AccumSize=AccumSize+nobj_flag
 
+#
+#       Make sure magnitude columns conform to sentinels being -99.9
+#
+        for mag in ['G','R','I','Z','Y','K']:
+            col='{:s}_MAG'.format(mag)
+            if (col in ExpCat[Cat]):
+                wsm= np.where(np.logical_or(ExpCat[Cat][col]<0.01,ExpCat[Cat][col]>35.0))
+                ExpCat[Cat][col][wsm]=-99.9
+
 #       FINISHED LOOPING OVER CATS
 
 #
@@ -854,75 +985,33 @@ if __name__ == "__main__":
     if (args.qa_select is not None):
 
         AccumData={}
-        for Col in ['sn','spread_model','flux_radius']:
+        for Col in ['SN','SPREAD_MODEL','FLUX_RADIUS','K_MAG','R_MAG','Z_MAG']:
             AccumData[Col]=np.zeros(AccumSize,dtype='f8')
-        for Col in ['gaia_star','phot_obj','vhs_star']:
+        for Col in ['GAIA_STAR','PHOT_OBJ','VHS_OBJ','EXT_MASH']:
             AccumData[Col]=np.zeros(AccumSize,dtype='i4')
 
         ctr_all=0
         for Cat in grp_list:
             key_array=ExpCat[Cat]['FLUX_AUTO']/ExpCat[Cat]['FLUXERR_AUTO']
             ks=key_array.size
-            AccumData['sn'][ctr_all:ctr_all+ks]=key_array
-            key_array=ExpCat[Cat]['SPREAD_MODEL']
-            AccumData['spread_model'][ctr_all:ctr_all+ks]=key_array
-            key_array=ExpCat[Cat]['FLUX_RADIUS']
-            AccumData['flux_radius'][ctr_all:ctr_all+ks]=key_array
-            key_array=ExpCat[Cat]['GAIA_STAR']
-            AccumData['gaia_star'][ctr_all:ctr_all+ks]=key_array
-            key_array=ExpCat[Cat]['PHOT_OBJ']
-            AccumData['phot_obj'][ctr_all:ctr_all+ks]=key_array
-            if ('VHS_STAR' in ExpCat[Cat]):
-                key_array=ExpCat[Cat]['VHS_STAR']
-                AccumData['vhs_star'][ctr_all:ctr_all+ks]=key_array
+            AccumData['SN'][ctr_all:ctr_all+ks]=key_array
+            for Col in ['SPREAD_MODEL','FLUX_RADIUS','K_MAG','R_MAG','Z_MAG','GAIA_STAR','PHOT_OBJ','VHS_OBJ','EXT_MASH']:
+                if (Col in ExpCat[Cat]):
+                    key_array=ExpCat[Cat][Col]
+                    AccumData[Col][ctr_all:ctr_all+ks]=key_array
             ctr_all+=ks
 
-        qa.plot_selection3('{:s}'.format(args.qa_select),AccumData)
-
-#    if (args.qa_dist is not None):
-#        data={}
-#        data['m_gaia']={}
-#        data['s_gaia']={}
-#        data['n_gaia']={}
-#        data['m_vhs']={}
-#        data['s_vhs']={}
-#        data['n_vhs']={}
-#
-#        for Cat in MetaCat:
-#            data['m_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['GAIA']['med_size']
-#            data['s_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['GAIA']['std_size']
-#            data['n_gaia'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['GAIA']['nm_cut']
-#            if (checkVHS):
-#                if (MetaCat[Cat]['VHS']['med_size']>0):
-#                    data['m_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['VHS']['med_size']
-#                if (MetaCat[Cat]['VHS']['std_size']>0):
-#                    data['s_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['VHS']['std_size']
-#                if (MetaCat[Cat]['VHS']['nm_cut']>0):
-#                    data['n_vhs'][MetaCat[Cat]['CCDNUM']]=MetaCat[Cat]['VHS']['nm_cut']
-#            if ('EXPNUM' in MetaCat[Cat]):
-#                data['EXPNUM']=MetaCat[Cat]['EXPNUM']
-#        
-#        qa.plot_FP_quant('{:s}'.format(args.qa_dist),data)
-
-##
-##   Obtain DES color information 
-##   Form list of lists containing IDs (for upload in a search)
-##
-#    IDList=[]
-#    for Cat in kept_cat_GAIA:
-#        for i in range(kept_cat_GAIA[Cat]['SOURCE_ID'].size):
-#            IDList.append([int(kept_cat_GAIA[Cat]['SOURCE_ID'][i])])
-#    Y6GoldCat,Y6GoldCols=get_Y6GoldPhot_GAIAObjects(IDList,dbh,dbSchema,Timing=True,verbose=2)
+        qa.plot_selection('{:s}'.format(args.qa_select),AccumData)
 
 #
 #   Form photometry columns for output catalogs 
 #
 
     color_dict={
-        'GI_COLOR':{'bit':1,'num':'G','den':'I','sentinel':1.6},
-        'IZ_COLOR':{'bit':2,'num':'I','den':'Z','sentinel':0.25}
+        'GI_COLOR':{'bit':1,'num':'G','den':'I','sentinel':1.3,'blue_lim':0.0,'red_lim':3.5, 'bbit':2, 'rbit':4},
+        'IZ_COLOR':{'bit':8,'num':'I','den':'Z','sentinel':0.2,'blue_lim':0.0,'red_lim':0.7, 'bbit':16, 'rbit':32}
     }
-    next_bit=4
+    next_bit=64
 #   Could be useful if we need to form colors or over-ride defaults
     color_col='{:s}{:s}_COLOR'.format(cnum.upper(),cden.upper())
     if (color_col not in color_dict):
@@ -933,12 +1022,27 @@ if __name__ == "__main__":
             print("Command line over-ride of sentinel color for {:s}... being set to: {:f}".format(color_col,args.sentinel_color))
             color_dict[color_col]['sentinel']=args.sentinel_color
 
-
     print("Forming color information for:")
     for col in color_dict:
         print(" {:s} with FLAG_COLOR bit: {:d} and sentinel {:f} ".format(col,color_dict[col]['bit'],color_dict[col]['sentinel']))
-    
-    for Cat in ExpCat:
+        print(color_dict[col])
+
+#   Mag based uncertainty:    
+#   m=-2.5*log(fnu/(1.0e-26*zpt))/log(10.0)
+#   dm=1.0857*dfnu/fnu
+#   S/N= 1.0857/dm
+
+ 
+    for Cat in grp_list:
+#
+#       Make sure magnitude columns conform to sentinels being -99.9
+#
+#        for mag in ['G','R','I','Z','Y','K']:
+#            col='{:s}_MAG'.format(mag)
+#            if (col in ExpCat[Cat]):
+#                wsm= np.where(np.logical_or(ExpCat[Cat][col]<0.01,ExpCat[Cat][col]>35.0))
+#                ExpCat[Cat][col][wsm]=-99.9
+
 #
 #       Add columns (fill with sentinels and flag all
 #
@@ -947,28 +1051,62 @@ if __name__ == "__main__":
         for col in color_dict:
             num=color_dict[col]['num']
             den=color_dict[col]['den']
+#
+#           Start by setting value for color to default and throwing the bit
+#
             ExpCat[Cat][col]=np.full(nobj,color_dict[col]['sentinel'],dtype='f8')
             ExpCat[Cat]['FLAG_COLOR']+=color_dict[col]['bit']
 
-            s_num=ExpCat[Cat]['PSF_FLUX_APER_8_{:s}'.format(num)]
-            n_num=ExpCat[Cat]['PSF_FLUX_ERR_APER_8_{:s}'.format(num)]
-            sn_num = np.divide(s_num, n_num, out=np.zeros_like(s_num), where=n_num!=0)
-
-            s_den=ExpCat[Cat]['PSF_FLUX_APER_8_{:s}'.format(den)]
-            n_den=ExpCat[Cat]['PSF_FLUX_ERR_APER_8_{:s}'.format(den)]
-            sn_den = np.divide(s_den, n_den, out=np.zeros_like(s_den), where=n_den!=0)
-
-#            sn_num=ExpCat[Cat]['PSF_FLUX_APER_8_{:s}'.format(num)]/ExpCat[Cat]['PSF_FLUX_ERR_APER_8_{:s}'.format(num)]
-#            sn_den=ExpCat[Cat]['PSF_FLUX_APER_8_{:s}'.format(den)]/ExpCat[Cat]['PSF_FLUX_ERR_APER_8_{:s}'.format(den)]
-            cflag=ExpCat[Cat]['PSF_FLUX_FLAGS_{:s}'.format(num)]+ExpCat[Cat]['PSF_FLUX_FLAGS_{:s}'.format(den)]
-           
-            wsm=np.where(np.logical_and(np.logical_and(sn_num>10.,sn_den>10.),np.logical_and(ExpCat[Cat]['PHOT_OBJ']==1,cflag==0)))
+            b_mag='{:s}_MAG'.format(num)
+            b_err='{:s}_MAGERR'.format(num)
+            b_flag='{:s}_FLAGS'.format(num)
+            r_mag='{:s}_MAG'.format(den)
+            r_err='{:s}_MAGERR'.format(den)
+            r_flag='{:s}_FLAGS'.format(den)
+##
+##          If we wanted S/N cuts...
+##
+#            s_num=ExpCat[Cat][b_mag]
+#            n_num=ExpCat[Cat][b_err]
+#            sn_num = 1.0857*np.divide(1.0, n_num, out=np.zeros_like(s_num), where=n_num!=0)
+#            s_den=ExpCat[Cat][r_mag]
+#            n_den=ExpCat[Cat][r_err]
+#            sn_den = 1.0857*np.divide(1.0, n_den, out=np.zeros_like(s_den), where=n_den!=0)
 #
-#           calculate color (note numerator and denominator are flipped to remove need for "-2.5")
-#           (also remove flag bit)
+#           cflag --> Check that there are no flags set on MAG measurements
+#           Later combine cflag with the fact that photometry exists 
+#           Also make sure that MAG values were not set to seninels.
 #
-            ExpCat[Cat][col][wsm]=2.5*np.log10(ExpCat[Cat]['PSF_FLUX_APER_8_{:s}'.format(den)][wsm]/ExpCat[Cat]['PSF_FLUX_APER_8_{:s}'.format(num)][wsm]) 
+            cflag=ExpCat[Cat][b_flag]+ExpCat[Cat][r_flag]
+            wsm=np.where(np.logical_and(
+                            np.logical_and(ExpCat[Cat][b_mag]>-99.,ExpCat[Cat][r_mag]>-99.),
+                            np.logical_and(ExpCat[Cat]['PHOT_OBJ']==1,cflag==0)))
+#
+#           Calculate color and then unset FLAG_COLOR
+#
+            ExpCat[Cat][col][wsm]=ExpCat[Cat][b_mag][wsm]-ExpCat[Cat][r_mag][wsm]
             ExpCat[Cat]['FLAG_COLOR'][wsm]-=color_dict[col]['bit']
+#
+#           Code below could handle red/blue drop-outs but current implementation is a little simplistic
+#
+##
+##           Handle blue drop outs (Blue color does not exist but red does)
+##
+#            wsm=np.where(np.logical_and(
+#                            np.logical_and(ExpCat[Cat][b_mag]<-99.,ExpCat[Cat][r_mag]>-99.),
+#                            np.logical_and(ExpCat[Cat]['PHOT_OBJ']==1,ExpCat[Cat]['{:s}_FLAGS'.format(den)]==0)))
+#            ExpCat[Cat][col][wsm]=color_dict[col]['red_lim']
+#            ExpCat[Cat]['FLAG_COLOR'][wsm]-=color_dict[col]['bit']
+#            ExpCat[Cat]['FLAG_COLOR'][wsm]+=color_dict[col]['rbit']
+##
+##           Handle red drop outs (Red color does not exist but blue does)
+##
+#            wsm=np.where(np.logical_and(
+#                            np.logical_and(ExpCat[Cat][b_mag]>-99.,ExpCat[Cat][r_mag]<-99.),
+#                            np.logical_and(ExpCat[Cat]['PHOT_OBJ']==1,ExpCat[Cat]['{:s}_FLAGS'.format(num)]==0)))
+#            ExpCat[Cat][col][wsm]=color_dict[col]['blue_lim']
+#            ExpCat[Cat]['FLAG_COLOR'][wsm]-=color_dict[col]['bit']
+#            ExpCat[Cat]['FLAG_COLOR'][wsm]+=color_dict[col]['bbit']
 
 #
 #   Write out the GAIA selected entries 
