@@ -340,6 +340,15 @@ if __name__ == "__main__":
             print("Warning: Catalog(s) PIFF-stars and HSMstat may not be given in the same order!")
             exit(1)
 #
+#       Sanity check of model is_reserve vs. HSMstat reserve columns
+#
+        d_reserve=star_data['is_reserve']-hsmData['reserve']
+        wsm=np.where(d_reserve!=0)
+        if (d_reserve[wsm].size > 0):
+            print("Warning: Comparison of is_reserve vs. reserve columns in two catalogs had {:d} mis-matches".format(d_reserve[wsm].size))
+            exit(1)        
+
+#
 #       Populate the results section
 #
         qa_result[icat]={'gen':{},'model':{},'stars':{},'starcol':[]}
