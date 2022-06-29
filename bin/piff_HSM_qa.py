@@ -352,9 +352,9 @@ if __name__ == "__main__":
 #       Populate the results section
 #
         qa_result[icat]={'gen':{},'model':{},'stars':{},'starcol':[]}
-        qa_result[icat]['gen']['FILENAME']=CatMod
-        qa_result[icat]['gen']['MODEL_FILENAME']=CatMod
-        qa_result[icat]['gen']['HSMSTAT_FILENAME']=stat_list[icat]
+        qa_result[icat]['gen']['FILENAME']=CatMod.split('/')[-1]
+        qa_result[icat]['gen']['MODEL_FILENAME']=CatMod.split('/')[-1]
+        qa_result[icat]['gen']['HSMSTAT_FILENAME']=stat_list[icat].split('/')[-1]
         qa_result[icat]['gen']['EXPNUM']=qa_mod['expnum']
         qa_result[icat]['gen']['CCDNUM']=qa_mod['ccdnum']
 #       Some logic to pull PFW_ATTEMPT_ID from header if it exists or from command line if specified
